@@ -1,0 +1,25 @@
+In order to prepare data for a given canton :
+  - extract individual geojson files for each polygon in swissBOUNDARIES3D_1_3_TLM_KANTONSGEBIET.geojson with extract.py
+  - rename St. Gallen ones with no '.' except for the extension, osmium does not like them
+  - then create the corresponding pbf files with
+      for f in Canton*geojson; do osmium extract --polygon $f -o ${f/geojson/pbf} ../../../graphhopper/europe_switzerland.pbf; done
+    each file contains a map of one connex part of one canton
+  - run extractAll.py script to extract the points on the border of each canton
+    Take care it runs 26 threads in // !
+    One needs gets <name of canton>-exits.pkl files
+  - run mergeCantons.py to put all exits of all cantons together, drop the non shared exits, and create InputData.pkl
+  - collectoCoordinates.py creates InputNodes.pkl from InputData.pkl so that we have full info on each node, including coordinates
+  - run buildWeights.py to compute the weights of routes between all exits nodes inside each Canton
+    This needs graphhopper to run as a server :
+       ./graphhopper.sh -a web -i ../STUF/swissBoundaries/Cantons/geneve2.pbf -o switzerland-geneve2-gh
+
+
+
+- run "osmium extract -p swissBoundaries/Cantons/<canton>.geojson ./switzerland-latest.osm -o <canton>.osm"
+  - there is a way to extract all in one osmium command once you have a polygon per canton
+  - extract from canton.osm the pairs of node on the canton border, using extractBorder.py. Note that these are taken from paths, when a node is referenced and another one is not
+  - add potentially the special points by hand
+  - extract again all cantons with complete_ways
+  - use https://pyrosm.readthedocs.io/en/latest/graphs.html and a dedicated bikeLength function to compute "distances" by bike between each pair of nodes on the border (or special), two ways, and between the border nodes and the ones ouside (one way)
+  - store all this in a file with one line per distance :
+     node1 node2 length cantonNode1
