@@ -32,7 +32,7 @@ cur = 1
 bitsets = {}
 cantonsWithPoints = set([additions[name][1] for name in additions])
 for name in points:
-    if name in cantonsWithPoints:
+    if name in cantonsWithPoints or name == "Kanton Aargau" or name == "Kanton Basel-Landschaft" or name == "Canton de Vaud" or name == "Kanton Luzern" or name == "Kanton Graubünden": # and name != "Canton de Genève" and name != "Canton Ticino":
         bitsets[name] = 0
     else:
         bitsets[name] = cur
@@ -41,8 +41,11 @@ for name in additions:
     id, canton = additions[name]
     bitsets[id] = cur
     cur *= 2
+for name in additions:
+    id, canton = additions[name]
+    print (name, canton, hex(bitsets[id]))
 completeRouteMask = cur-1
-#print (bitsets, completeRouteMask)
+print (bitsets, cur, completeRouteMask, bin(completeRouteMask).count('1'))
 
 # build the table to nodes
 nodes = {}
@@ -63,6 +66,7 @@ weights = pickle.load(fh)
 
 # initial setup (reverse start from Bern)
 routes = {33202504:{bitsets[33202504]:(33202504, [], 0, bitsets[33202504])}}
+print ("initial route", routes)
 bestRoutes = {}
 bestRoute = ()
 bestLength = 99999999999999999999999999
@@ -94,12 +98,16 @@ def buildNewRoutes():
         for bitmask in routes[curNode]:
             prevNodes = routes[curNode][bitmask][1]
             length =  routes[curNode][bitmask][2]
-            for newDest in weights[curNode]:
-                newPrevNodes = prevNodes+[curNode]
-                newLength = length+weights[curNode][newDest]
-                newBitmask = bitmask|nodes[newDest][2]
-                checkAndAddRoute(newDest, newPrevNodes, newLength, newBitmask)
-
+            if curNode in weights:
+                for newDest in weights[curNode]:
+                    if newDest not in nodes: continue
+                    #if not prevNodes:
+                    newPrevNodes = prevNodes+[curNode]
+                    #else:
+                    #    newPrevNodes = prevNodes
+                    newLength = length+weights[curNode][newDest]
+                    newBitmask = bitmask|nodes[newDest][2]
+                    checkAndAddRoute(newDest, newPrevNodes, newLength, newBitmask)
 
 def disp(name, color, ax):
     data = json.load(open("../swissBoundaries/Cantons/%s"%name,'r'))
@@ -110,48 +118,78 @@ def disp(name, color, ax):
             y = [c[1] for c in pol]
             ax.plot(x,y,color=color)
 
-cols = ['red', 'blue', 'green']
-            
+#cols = [ 'red', 'blue', 'green', 'orange', 'black', 'pink', 'gray' ]
+
 def displayNewRoutes(n):
     rs = {}
-    for node in newRoutes:
-        for bm in newRoutes[node]:
-            pnodes = newRoutes[node][bm][1]
-            if node not in rs: rs[node] = []
-            rs[node].append(pnodes)
     c = 0
-    for node in rs:
+    for node in newRoutes:
+        routes = []
+        bms = []
+        for bm in newRoutes[node]:
+            #print (hex(bm), bin(bm).count("1"))
+            #for bz in bms:
+            #    if bm&bz==bm:
+            #        print ("%x < %x, %d >? %d" % (bm, bz, newRoutes[node][bm][2], newRoutes[node][bz][2]))
+            bms.append(bm)
+            pnodes = newRoutes[node][bm][1]
+            routes.append(pnodes)
+            bms.append(bm)
         c = c + 1
         #if c > 3: break
-        #print (node)
+        print (node, routes[0])
         ax = plt.subplot()
         plotted = []
         disp('swissBOUNDARIES3D_1_3_TLM_KANTONSGEBIET.geojson', 'gray', ax)
-        for pnodes in rs[node]:
+        for pnodes in routes:
             if node not in plotted:
                 plotted.append(node)
                 ax.plot(allNodes[node]['lon'], allNodes[node]['lat'], 'gx')
             nodes = pnodes + [node]
             for index in range(len(pnodes)):
                 ax.plot((allNodes[nodes[index]]['lon'], allNodes[nodes[index+1]]['lon']),
-                        (allNodes[nodes[index]]['lat'], allNodes[nodes[index+1]]['lat']),
-                        cols[index])
+                        (allNodes[nodes[index]]['lat'], allNodes[nodes[index+1]]['lat'])#,
+                        #cols[index]
+                        )
+            break
         plt.show()
 
+def keepShortRoutes(rs, n):
+    #n = max([bin(rs[node][bm][3]).count('1') for node in rs for bm in rs[node]])
+    #allRoutes = [rs[node][bm] for node in rs for bm in rs[node]]
+    #sorted(allRoutes, key=lambda r: r[2]/(bin(r[3]).count('1')**2))
+    #kept = allRoutes[:200]
+    kept = [rs[node][bm] for node in rs for bm in rs[node] if bin(rs[node][bm][3]).count('1')>n-3 ]
+    if len(kept) > 2000000:
+        sorted(kept, key=lambda r: r[2]-200000000*(bin(r[3]).count('1')))
+        kept = kept[:1000000]
+    #print (kept[0][2], hex(kept[0][3]), kept[10][2], hex(kept[10][3]), kept[20][2], hex(kept[20][3]))
+    res = {}
+    for node, pnodes, l, bm in kept:
+        if node not in res: res[node] = {}
+        res[node][bm] = (node, pnodes, l, bm)
+    return res
+        
 # loop until all routes are complete or gone
 n = 0
 while len(routes.keys()) > 0:
     print (n)
     buildNewRoutes()
-    print ("New routes : %d" % sum([len(newRoutes[n].keys()) for n in newRoutes]))
-    #if n > 0:displayNewRoutes(n)
-    routes = newRoutes
+    if len(newRoutes) == 0: break
+    nb = sum([len(newRoutes[n].keys()) for n in newRoutes])
+    print ("New routes : %d, nbCantones=%d" % (nb, max([bin(newRoutes[node][bm][3]).count('1') for node in newRoutes for bm in newRoutes[node]])))
+    #if n == 30: displayNewRoutes(n)
+    if nb > 20000:
+        routes = keepShortRoutes(newRoutes, n)
+    else:
+        routes = newRoutes
     n += 1
-    if n > 14: break
+    if n > 40: break
 
 # keep only complete routes from the bestRoutes and find best one
 finalRoutes = []
 for node in bestRoutes:
+    #print ([hex(d) for d in bestRoutes[node]])
     if completeRouteMask in bestRoutes[node]:
         node, prevNodes, length, bitmask = bestRoutes[node][completeRouteMask]
         nodes = prevNodes + [node]
@@ -165,6 +203,13 @@ print ("Found %d complete routes" % len(finalRoutes))
 for nodes, length in finalRoutes:
     print (length, nodes)
 
+if len(finalRoutes) == 0:
+    for node in bestRoutes:
+        for mask in bestRoutes[node]:
+            if bin(mask).count('1') >= 26:
+                print (hex(mask), hex(completeRouteMask-mask))
+        
+    
 # best route
 print ("\nBest route is")
 print (bestLength, bestRoute)
