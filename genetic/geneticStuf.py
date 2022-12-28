@@ -3,22 +3,6 @@ import random, operator
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
-class Route:
-    '''Object holding a route, that is a list of places the route goes through'''
-    def __init__(self, data, cantons):
-        self.places = data.createRouteFromCantonList(cantons)
-        self.distance = 0
-        for n in range(len(self.places)-1):
-            self.distance += data.distances[self.places[n]][self.places[n+1]]
-        self.fitness = 1 / float(self.distance) if self.distance else 999999
-    def routeFitness(self):
-        return self.fitness
-    def routeDistance(self):
-        return self.distance
-    def __repr__(self):
-        return "%s d=%.3f f=%.3f" % (str(self.places), self.distance, self.fitness)
-
 class geoData:
     '''
     class describing the geography on which we will work
@@ -27,14 +11,14 @@ class geoData:
          each value is a list of pairs id of point, id of way
        - fixedPoints is a dict of fixed points to go through
          each value is a pair with point id and name of the canton you're in
-       - allNodes is a dict with key the id of the nodes and value a dict with node data
-         out of which id, lon and lat
        - distances is a dict of dict giving the distance between 2 points
        - borders is a dict of dict giving the set of points on the border between 2 cantons
-       - cantonGraph (omputed from the rest) is a dict of dict giving for
+       - cantonGraph (computed from the rest) is a dict of dict giving for
          each pair of cantons lists of possible intermediate cantons to go
          through to reach the later from the former. Only shortest path are
          listed. Each entry is a list of lists
+       - (unused) allNodes is a dict with key the id of the nodes and value a dict with node data
+         out of which id, lon and lat
     This class should be inherited from by actual instantiations which will fill
     all data from external source
     '''
@@ -74,61 +58,49 @@ class geoData:
             c = cantons[n]
             isTown = c in self.fixedPoints
             if isTown:
-                townC = fixed2Canton[c]
+                townC = self.fixedPoints[c][1]
                 if n == 0 or cantons[n-1] != townC:
                     extendedCantons.append(townC)
             extendedCantons.append(c)
             if isTown:
-                if n!= len(cantons) and cantons[n+1] != townC:
+                if n!= len(cantons)-1 and cantons[n+1] != townC:
                     extendedCantons.append(townC)
         route = []
         # add extra cantons when cantons do not touch each other
         finalList = [[]]
-        if extendedCantons[1] not in self.fixedPoints or fixed2Canton[extendedCantons[1]] != extendedCantons[0]:
+        if extendedCantons[1] not in self.fixedPoints or self.fixedPoints[extendedCantons[1]][1] != extendedCantons[0]:
             finalList = [[extendedCantons[0]]]
         for n in range(1, len(extendedCantons)):
             c1 = extendedCantons[n-1]
             c2 = extendedCantons[n]
-            newFinalList = []
+            # if we got 2 cantons, add extra ones when needed
             if c1 not in self.fixedPoints and c2 not in self.fixedPoints:
+                newFinalList = []
                 for f in finalList:
                     for ext in self.cantonsGraph[c1][c2]:
                         newFinalList.append(f + ext)
-            finalList = newFinalList
+                finalList = newFinalList
+            # add new canton/town to all lists
             newFinalList = []
             for fin in finalList:
                 newFinalList.append(fin+[c2])
             finalList = newFinalList
         return finalList
 
-    def createRouteFromCantonList(self, cantons):
-        '''creates a route from a list of cantons. A route is a list of places
-           the route goes through. it's basically using amendCantonList and
-           picking places at random on the borders of cantons'''
-        route = []
-        cantons = self.amendCantonList(cantons)[0] # FIXME !!!
-        for n in range(1, len(cantons)):
-            c1 = cantons[n-1]
-            if c1 in self.fixedPoints:
-                route.append(c1)
-                continue
-            c2 = cantons[n]
-            if c2 in self.fixedPoints:
-                continue
-            city = random.choice(self.borders[c1][c2])
-            #print (city, c1, c2)
-            route.append(city)
-        return route
-
     def _addFixedPointToRoute(self, route, point):
         mind = 999999999
         npath = []
         for path, d in route:
-            d = d + self.distances[path[-1]][point]
+            #print ('X', path, point)
+            if path[-1] != point:
+                d = d + self.distances[path[-1]][point]
+                p = path + [point]
+            else:
+                p = path
             if d < mind:
                 mind = d
-                npath = path
-        return [(npath+[point], mind)]
+                npath = p
+        return [(npath, mind)]
 
     def _addCantonToRoute(self, route, canton):
         nRoute = []
@@ -178,13 +150,15 @@ class geoData:
         '''
         # get full list of cantons/fixedPoints
         lists = self.amendCantonList(cantons)
-        #print(lists)
         # compute best route for each list of cantons
         mind = 9999999999999
         minPath = []
         for l in lists :
-            # initialize routes with points in first canton
-            route = [([p], 0) for p,way in self.pointsPerCanton[l[0]]]
+            # initialize routes with points in first canton or town
+            if l[0] in self.fixedPoints:
+                route = [([l[0]],0)]
+            else:
+                route = [([p], 0) for p,way in self.pointsPerCanton[l[0]]]
             # compute best routes to any point in last canton
             route = self._bestRoutesFromCantonList(l[1:], route)
             # keep only the shortest route of all
@@ -194,13 +168,52 @@ class geoData:
                 minPath = bestPath
                 mind = bestDist
         return minPath, mind
-    
-    def initialPopulation(self, popSize, cantons):
-        '''creates a population of random routes given a set of cantons'''
-        population = []
-        for i in range(0, popSize):
-            population.append(Route(self, cantons))
-        return population
+
+class Route:
+    '''
+    Object holding a route, that is a list of places the route goes through
+    '''
+    def __init__(self, data, cantons):
+        self.cantons = cantons[:]
+        self.path, self.distance = data.bestRoutesFromCantonList(cantons)
+        self.fitness = 1000 / float(self.distance) if self.distance else 999999
+    def routeFitness(self):
+        return self.fitness
+    def routeDistance(self):
+        return self.distance
+    def __repr__(self):
+        return "%s d=%.3f f=%.3f" % (str(self.cantons), self.distance, self.fitness)
+    def breed(self, data, other):
+        geneA = int(random.random() * len(self.cantons))
+        geneB = int(random.random() * len(self.cantons))
+        startGene = min(geneA, geneB)
+        endGene = max(geneA, geneB)
+        childP1 = self.cantons[startGene:endGene+1]
+        childP2 = [item for item in other.cantons if item not in childP1]
+        return Route(data, childP1 + childP2)
+    def mutate(self, data, mutationRate):
+        ncs = self.cantons[:]
+        for swapped in range(len(ncs)):
+            if(random.random() < mutationRate):
+                swapWith = int(random.random() * len(ncs))
+                c1 = ncs[swapped]
+                c2 = ncs[swapWith]
+                ncs[swapped] = c2
+                ncs[swapWith] = c1
+        return Route(data, ncs)
+
+
+def initialPopulation(data, popSize):
+    '''creates a population of random routes given a set of cantons'''
+    # list fixedPoints
+    cantons = list(data.fixedPoints.keys())
+    # add all cantons, except the ones containing fixed points
+    cantons.extend(list(set(data.pointsPerCanton.keys())-set([c for id,c in data.fixedPoints.values()])))
+    population = []
+    for i in range(0, popSize):
+        random.shuffle(cantons)
+        population.append(Route(data, cantons))
+    return population
 
 def rankRoutes(population):
     '''Ranks a populations of routes based on their fitness (1/length)'''
@@ -233,74 +246,41 @@ def matingPool(population, selectionResults):
         matingpool.append(population[index])
     return matingpool
 
-def breed(parent1, parent2):
-    child = []
-    childP1 = []
-    childP2 = []
-    
-    geneA = int(random.random() * len(parent1))
-    geneB = int(random.random() * len(parent1))
-    
-    startGene = min(geneA, geneB)
-    endGene = max(geneA, geneB)
-
-    for i in range(startGene, endGene):
-        childP1.append(parent1[i])
-        
-    childP2 = [item for item in parent2 if item not in childP1]
-
-    child = childP1 + childP2
-    return child
-
-def breedPopulation(matingpool, eliteSize):
+def breedPopulation(data, matingpool, eliteSize):
     children = []
     length = len(matingpool) - eliteSize
     pool = random.sample(matingpool, len(matingpool))
-
     for i in range(0,eliteSize):
-        children.append(matingpool[i])
-    
+        children.append(matingpool[i])    
     for i in range(0, length):
-        child = breed(pool[i], pool[len(matingpool)-i-1])
+        child = pool[i].breed(data, pool[len(matingpool)-i-1])
         children.append(child)
     return children
 
-def mutate(individual, mutationRate):
-    for swapped in range(len(individual)):
-        if(random.random() < mutationRate):
-            swapWith = int(random.random() * len(individual))
-            
-            city1 = individual[swapped]
-            city2 = individual[swapWith]
-            
-            individual[swapped] = city2
-            individual[swapWith] = city1
-    return individual
-
-def mutatePopulation(population, mutationRate):
-    mutatedPop = []
-    
+def mutatePopulation(data, population, mutationRate):
+    mutatedPop = []    
     for ind in range(0, len(population)):
-        mutatedInd = mutate(population[ind], mutationRate)
+        mutatedInd = population[ind].mutate(data, mutationRate)
         mutatedPop.append(mutatedInd)
+        mutatedPop.append(population[ind])            
     return mutatedPop
 
-def nextGeneration(currentGen, eliteSize, mutationRate):
+def nextGeneration(data, currentGen, eliteSize, mutationRate):
     popRanked = rankRoutes(currentGen)
     selectionResults = selection(popRanked, eliteSize)
     matingpool = matingPool(currentGen, selectionResults)
-    children = breedPopulation(matingpool, eliteSize)
-    nextGeneration = mutatePopulation(children, mutationRate)
+    children = breedPopulation(data, matingpool, eliteSize)
+    nextGeneration = mutatePopulation(data, children, mutationRate)
     return nextGeneration
 
-def geneticAlgorithm(population, popSize, eliteSize, mutationRate, generations):
-    pop = initialPopulation(popSize, population)
-    print("Initial distance: " + str(1 / rankRoutes(pop)[0][1]))
-    
+def geneticAlgorithm(data, popSize, eliteSize, mutationRate, generations):
+    pop = initialPopulation(data, popSize)
+    print(pop)
+    print("Initial distance: " + str(1000 / rankRoutes(pop)[0][1]))
     for i in range(0, generations):
-        pop = nextGeneration(pop, eliteSize, mutationRate)
-    
-    print("Final distance: " + str(1 / rankRoutes(pop)[0][1]))
+        pop = nextGeneration(data, pop, eliteSize, mutationRate)
+        print(pop)
+    print("Final distance: " + str(1000 / rankRoutes(pop)[0][1]))
     bestRouteIndex = rankRoutes(pop)[0][0]
     bestRoute = pop[bestRouteIndex]
     return bestRoute

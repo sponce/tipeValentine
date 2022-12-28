@@ -92,6 +92,9 @@ def test_amendCantonList():
     assert data.amendCantonList(['A', 'C']) == [['A', 'B', 'C']]
     assert data.amendCantonList(['A', 'E']) == [['A', 'B', 'E'], ['A', 'D', 'E']]
     assert data.amendCantonList(['A', 'F']) == [['A', 'B', 'C', 'F'], ['A', 'B', 'E', 'F'], ['A', 'D', 'E', 'F']]
+    assert data.amendCantonList(['a', 'b']) == [['a', 'A', 'B', 'b']]
+    assert data.amendCantonList(['a', 'D', 'e']) == [['a', 'A', 'D', 'E', 'e']]
+    assert data.amendCantonList(['a', 'A', 'a']) == [['a', 'A', 'a']]
 
 ABRoutes = [[121],[122],[123]]
 ACRoutes = [[121,231], [121,232], [121,233],
@@ -103,33 +106,6 @@ AERoutes = [[121,251], [121,252], [121,253],
             [141,451], [141,452], [141,453],
             [142,451], [142,452], [142,453],
             [143,451], [143,452], [143,453]]
-
-def test_createRouteFromCantonList():
-    assert data.createRouteFromCantonList(['A', 'B']) in ABRoutes
-    assert data.createRouteFromCantonList(['A', 'C']) in ACRoutes
-    assert data.createRouteFromCantonList(['A', 'E']) in AERoutes
-
-def test_initialPopulation():
-    ABPop = data.initialPopulation(5,['A', 'B'])
-    assert len(ABPop) == 5
-    for route in data.initialPopulation(5,['A', 'B']):
-        assert route.places in ABRoutes
-    ACPop = data.initialPopulation(4,['A', 'C'])
-    assert len(ACPop) == 4
-    for route in ACPop:
-        assert route.places in ACRoutes
-    AEPop = data.initialPopulation(6,['A', 'E'])
-    assert len(AEPop) == 6
-    for route in AEPop:
-        assert route.places in AERoutes
-
-def test_rankRoutes():
-    pop = data.initialPopulation(5,['A', 'F'])
-    ranked = rankRoutes(pop)
-    fitnesses = [fit for index,fit in ranked]
-    assert sorted(fitnesses, reverse=True) == fitnesses
-    for index, fit in ranked:
-        assert fit == pop[index].routeFitness()
 
 def test_addFixedPointToRoute():
     assert data._addFixedPointToRoute([([121],0), ([122],0), ([141],0)], 'a') == [([121, 'a'], 0.5)]
@@ -146,10 +122,16 @@ def test_bestRoutesFromCantonList_int():
     assert data._bestRoutesFromCantonList(['B','b'], [([121],0), ([122],0), ([141],0)]) == [([121, 'b'], 0.5)]
     assert data._bestRoutesFromCantonList(['a', 'A', 'B','b'], [([121],0), ([122],0), ([141],0)]) == [([121, 'a', 121, 'b'], 1.5)]
     assert data._bestRoutesFromCantonList(['B','C','F','f'], [([121],0), ([122],0), ([141],0)]) == [([121, 231, 361, 'f'], 5.5)]
+    assert data._bestRoutesFromCantonList(['a', 'A', 'D', 'E', 'e'], [([121],0)]) == [([121, 'a', 121, 241, 251, 'e'], 5.5)]
+    print('ST')
+    assert data._bestRoutesFromCantonList(['a', 'A'], [(['a'],0)]) == [(['a', 121], .5), (['a', 122], .5), (['a', 123], .5), (['a', 141], .5), (['a', 142], .5), (['a', 143], .5)]
 
 def test_bestRoutesFromCantonList():
     assert data.bestRoutesFromCantonList(['A','F']) == ([121, 231, 361], 5)
     assert data.bestRoutesFromCantonList(['A','D','F']) == ([141, 451, 561], 9)
+    assert data.bestRoutesFromCantonList(['a','b']) ==  (['a', 121, 'b'], 1.)
+    assert data.bestRoutesFromCantonList(['a','e']) ==  (['a', 121, 251, 'e'], 3.0)
+    assert data.bestRoutesFromCantonList(['a','A']) ==  (['a', 121], 0.5)
 
 def test_bestRoutesFromCantonList_speed():
     class largeData(geoData):
@@ -212,7 +194,6 @@ def test_bestRoutesFromCantonList_speed():
     # Now let's see how much time it takes to find a route there
     data = largeData()
     minPath, mind = data.bestRoutesFromCantonList(['C0','C49'])
-    print(minPath)
     for n in range(len(minPath)):
         if n != 33 and n != 34:
             assert minPath[n] == n*1000000+(n+1)*1000
@@ -222,3 +203,40 @@ def test_bestRoutesFromCantonList_speed():
             assert minPath[n] == 34035023
     assert mind == 48*49/2 - 34
 
+def test_initialPopulation():
+    ABPop = initialPopulation(data, 5)
+    assert len(ABPop) == 5
+    for route in ABPop:
+        d = 0
+        for n in range(len(route.path)-1):
+            d += data.distances[route.path[n]][route.path[n+1]]
+        assert d == route.distance
+
+def test_rankRoutes():
+    pop = initialPopulation(data, 5)
+    ranked = rankRoutes(pop)
+    fitnesses = [fit for index,fit in ranked]
+    assert sorted(fitnesses, reverse=True) == fitnesses
+    for index, fit in ranked:
+        assert fit == pop[index].routeFitness()
+
+def test_selection():
+    pop = initialPopulation(data, 15)
+    ranked = rankRoutes(pop)
+    selected = selection(ranked, 4)
+    assert([i for i,f in ranked][:4] == selected[:4])
+
+def test_breed():
+    r1 = Route(data, ['A','B','C','D','E'])
+    r2 = Route(data, ['C','D','A','B','E'])
+    r3 = r1.breed(data, r2)
+    print(r1)
+    print(r2)
+    print(r3)
+    assert True
+
+#def test_geneticAlgorithm():
+#    bestRoute = geneticAlgorithm(data, 10, 4, 0.1, 5)
+#    print (bestRoute)
+#    print(bestRoute.path)
+#    assert(False)
