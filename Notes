@@ -1,25 +1,45 @@
-In order to prepare data for a given canton :
+How to redo everything from scratch :
+
+Step 1 : extract pbf files per canton
   - extract individual geojson files for each polygon in swissBOUNDARIES3D_1_3_TLM_KANTONSGEBIET.geojson with extract.py
   - rename St. Gallen ones with no '.' except for the extension, osmium does not like them
   - then create the corresponding pbf files with
-      for f in Canton*geojson; do osmium extract --polygon $f -o ${f/geojson/pbf} ../../../graphhopper/europe_switzerland.pbf; done
+      for f in Canton*geojson; do osmium extract --polygon $f -o ${f/geojson/pbf} ../../../graphhopper/switzerland-latest.osm.pbf; done
     each file contains a map of one connex part of one canton
+
+Step 2 : extract borders for each canton
   - run extractAll.py script to extract the points on the border of each canton
     Take care it runs 26 threads in // !
-    One needs gets <name of canton>-exits.pkl files
+    One gets <name of canton>-exits.pkl files
+    It contains a list of ids of points next to the border on each way crossing it.
+    For each way, only the lowest id of the 2 ends of the way if kept
   - run mergeCantons.py to put all exits of all cantons together, drop the non shared exits, and create InputData.pkl
-  - collectoCoordinates.py creates InputNodes.pkl from InputData.pkl so that we have full info on each node, including coordinates
-  - run buildWeights.py to compute the weights of routes between all exits nodes inside each Canton
+    this can also merge some cantons to minimize number of exits (commented right now)
+    output is a pair (dict(canton -> list of ids), dict(fixedPointName, pair(id, cantonWhereInLeaves)))
+  - NOT NEEDED collectCoordinates.py creates InputNodes.pkl from InputData.pkl so that we have full info on each node, including coordinates
+  - compute list of borders per pair of cantons with computeBorders.pkl
+    this can also reduce the number of borders to 40, to limit the cost of step 3 (Not on)
+
+Step 3 : compute weights of all routes within each canton
+  - run buildWeights.py to compute the weights of routes between all borders inside each Canton
     This needs graphhopper to run as a server :
-       ./graphhopper.sh -a web -i ../STUF/swissBoundaries/Cantons/geneve2.pbf -o switzerland-geneve2-gh
+       ./graphhopper.sh -a web -i switzerland-latest.osm.pbf --port  8989 --admin-port 8990
+  - put all weights together with `python mergeWeights.py weights*.pkl`
 
+Step 5 : first algorithm to find the "best" route for a given list of cantons/towns
+  - the cantons/towns should be visited in that strict order
+  - a graph of cantons is prepared to that given 2, one know through which other you should travel
+  - the list of cantons/town is modified so that
+    - for each town, we make sure its canton is added before and after, unless it's already there
+    - for each pair of cantons which do not touch each other, we use the graph to add cantons touching each other in between. We may create different lists at this point
+  - a route then created from the new lists the following way :
+    - for each pair of cantons, pick a random point on the border
+    - for a pair town/canton, just add the town
+    - for a pair canton/town, do nothing
+    - then go through the list a few times and optimize each border town
 
+Step 6 : master genetic algorithm to find the best succession of cantons
+  - initial population is a randomization of the list of cantons
+  - breeding is standard
+  - mutations are inversions of 2 items in the list or change of a border town for another one on the same border
 
-- run "osmium extract -p swissBoundaries/Cantons/<canton>.geojson ./switzerland-latest.osm -o <canton>.osm"
-  - there is a way to extract all in one osmium command once you have a polygon per canton
-  - extract from canton.osm the pairs of node on the canton border, using extractBorder.py. Note that these are taken from paths, when a node is referenced and another one is not
-  - add potentially the special points by hand
-  - extract again all cantons with complete_ways
-  - use https://pyrosm.readthedocs.io/en/latest/graphs.html and a dedicated bikeLength function to compute "distances" by bike between each pair of nodes on the border (or special), two ways, and between the border nodes and the ones ouside (one way)
-  - store all this in a file with one line per distance :
-     node1 node2 length cantonNode1
