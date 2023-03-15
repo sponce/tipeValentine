@@ -105,10 +105,69 @@ plt.show()
 
 # simplify graph
 simpleGraph = simplifyGraphWithPredicate(graph, nodeToCluster)
-newClusters = []
-for c in clusters:
-    newClusters.append([n for n in c if n in simpleGraph.nodes()])
-#networkx.draw_networkx(graph, node_coords, label=False)
-displayClusteredNodes(simpleGraph, node_coords, newClusters)
-plt.show()
 print(simpleGraph)
+simpleClusters = []
+for c in clusters:
+    simpleClusters.append([n for n in c if n in simpleGraph.nodes()])
+displayClusteredNodes(simpleGraph, node_coords, simpleClusters)
+plt.show()
+
+
+def clusteredToRegularGraph(G, clusters):
+    '''create a regular graph from a clusterd graph 5.2.2 of the thesis'''
+    P2 = 8000*len(clusters) # sth > min Tour len * nb subclusters
+    H = networkx.Graph()
+    # same nodes
+    for node in G.nodes(): H.add_node(node)
+    # 0 weight in each subcluster cycle
+    for cluster in clusters:
+        for i in range(1, len(cluster)):
+            H.add_edge(cluster[i-1], cluster[i], weight=0)
+        H.add_edge(cluster[-1], cluster[0], weight=0)
+    # edges from subcluster to other subclusters
+    for a in range(len(clusters)):
+        for b in range(len(clusters)):
+            if a == b: break
+            for i1 in range(len(clusters[a])):
+                n1 = clusters[a][i1]
+                np1 = clusters[a][i1-1] if i1 > 0 else clusters[a][-1]
+                for n2 in clusters[b]:
+                    if n2 in G[n1]:
+                        H.add_edge(n1, n2, weight=G[n1][n2]['weight'])
+    return H
+
+def regularToClusterRoute(HRoute, nodeToCluster):
+    '''converts route in regular graph issued from a clustered one
+       to the route in the original graph'''
+    firstNode = HRoute[0]
+    GRoute = [firstNode,]
+    lastclus = nodeToCluster[firstNode]
+    for v in HRoute[1:]:
+        clus = nodeToCluster[v]
+        if lastclus != clus:
+            GRoute.append(v)
+            lastclus = clus
+    return GRoute
+
+def displayGraphWithRoute(G, clusters, node_coords, route):
+    '''Displays a cluster graph with each cluster in a different color
+       and traces the given route on top'''
+    pairRoute = list(networkx.utils.pairwise(route))
+    displayClusteredNodes(G, node_coords, clusters)
+    networkx.draw_networkx_edges(H, node_coords, pairRoute, node_size=0, width=1)
+    plt.show()
+
+# create equivalent, non clusterd graph
+H = clusteredToRegularGraph(simpleGraph, simpleClusters)
+
+# compute best route in regular graph
+HRoute = networkx.approximation.traveling_salesman_problem(H, cycle=False)
+
+# display best route in regular graph
+displayGraphWithRoute(simpleGraph, simpleClusters, node_coords, HRoute)
+
+# get route in original clustered graph
+GRoute = regularToClusterRoute(HRoute, nodeToCluster)
+
+# display route
+displayGraphWithRoute(simpleGraph, simpleClusters, node_coords, GRoute)
