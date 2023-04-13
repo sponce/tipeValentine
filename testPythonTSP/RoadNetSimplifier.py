@@ -40,9 +40,11 @@ def displayClusteredNodes(graph, node_coords, clusters):
         networkx.draw_networkx_nodes(graph, node_coords, cluster, node_size=20, node_color=colors[n%len(colors)])
 
 def convertToDiGraph(osmGraph):
-    '''converts a multipleDiGraph to a diGraph'''
+    '''converts a multipleDiGraph to a diGraph
+       and drops edges with identical src and dst'''
     graph = networkx.DiGraph()
     for u,v,data in osmGraph.edges(data=True):
+        if u == v: continue
         w = data['length']
         if graph.has_edge(u,v):
             graph[u][v]['weight'] = min(w, graph[u][v]['weight'])
@@ -53,7 +55,10 @@ def convertToDiGraph(osmGraph):
 
 def IsNodeInternalToCluster(G: networkx.DiGraph, node, nodeToCluster):
     c = nodeToCluster[node]
-    for p in graph[node]:
+    for p, _ in G.in_edges(node):
+        if nodeToCluster[p] != c:
+            return False
+    for _, p in G.out_edges(node):
         if nodeToCluster[p] != c:
             return False
     return True    
@@ -61,21 +66,25 @@ def IsNodeInternalToCluster(G: networkx.DiGraph, node, nodeToCluster):
 
 def simplifyGraphWithPredicate(G: networkx.DiGraph, nodeToCluster):
     '''
-    Loop over the graph until all nodes that match the supplied predicate 
-    have been removed and their incident edges fused.
+    Remove internal nodes of each cluster, keeping the connectivity and
+    computing the new weight as the lowest wieght of all connections
     '''
     g0 = G.copy()
     for node in G.nodes:
-        if IsNodeInternalToCluster(G, node, nodeToCluster):
+        if IsNodeInternalToCluster(g0, node, nodeToCluster):
             in_edges_containing_node = list(g0.in_edges(node))
             out_edges_containing_node = list(g0.out_edges(node))
             for in_src, _ in in_edges_containing_node:
                 for _, out_dst in out_edges_containing_node:
-                    # g0.add_edge(in_src, out_dst)
-                    dist = networkx.shortest_path_length(
-                      g0, in_src, out_dst, weight='weight'
-                    )
-                    g0.add_edge(in_src, out_dst, weight=dist)
+                    if in_src == out_dst: continue
+                    dist = g0[in_src][node]['weight'] + g0[node][out_dst]['weight']
+                    if out_dst in g0[in_src]:
+                        # if already connected, keep a single connection
+                        g0[in_src][out_dst]['weight'] = min(dist, g0[in_src][out_dst]['weight'])
+                    else:
+                        g0.add_edge(in_src, out_dst, weight=dist)
+                        if nodeToCluster[in_src] != nodeToCluster[out_dst]:
+                            print('AIE', in_src, out_dst, nodeToCluster[in_src], nodeToCluster[out_dst])
             g0.remove_node(node)
     return g0
 
@@ -157,6 +166,15 @@ def displayGraphWithRoute(G, clusters, node_coords, route):
     networkx.draw_networkx_edges(H, node_coords, pairRoute, node_size=0, width=1)
     plt.show()
 
+def displayGraphWithEdges(G, clusters, node_coords):
+    '''Displays a cluster graph with each cluster in a different color
+       and traces the given route on top'''
+    displayClusteredNodes(G, node_coords, clusters)
+    networkx.draw_networkx_edges(G, node_coords, node_size=0, width=1)
+    plt.show()
+
+displayGraphWithEdges(simpleGraph, simpleClusters, node_coords)
+    
 # create equivalent, non clusterd graph
 H = clusteredToRegularGraph(simpleGraph, simpleClusters)
 
