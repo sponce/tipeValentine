@@ -9,6 +9,7 @@ import osmnx
 import networkx
 import math
 import matplotlib.pyplot as plt
+from Utils import displayClusteredNodes, displayGraphWithRoute, displayGraphWithEdges
 
 def clusterize(G, nodes, NX, NY):
     '''Create artificially rectangle clusters in a non clustered problem
@@ -32,13 +33,6 @@ def clusterize(G, nodes, NX, NY):
         nodeToCluster[n] = cluster
     return clusters, nodeToCluster
 
-def displayClusteredNodes(graph, node_coords, clusters):
-    '''Displays a clustered graph with one color per cluster'''
-    colors=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
-    for n in range(len(clusters)):
-        cluster = clusters[n]
-        networkx.draw_networkx_nodes(graph, node_coords, cluster, node_size=20, node_color=colors[n%len(colors)])
-
 def convertToDiGraph(osmGraph):
     '''converts a multipleDiGraph to a diGraph
        and drops edges with identical src and dst'''
@@ -52,7 +46,6 @@ def convertToDiGraph(osmGraph):
             graph.add_edge(u, v, weight=w)
     return graph
 
-
 def IsNodeInternalToCluster(G: networkx.DiGraph, node, nodeToCluster):
     c = nodeToCluster[node]
     for p, _ in G.in_edges(node):
@@ -63,11 +56,10 @@ def IsNodeInternalToCluster(G: networkx.DiGraph, node, nodeToCluster):
             return False
     return True    
 
-
 def simplifyGraphWithPredicate(G: networkx.DiGraph, nodeToCluster):
     '''
     Remove internal nodes of each cluster, keeping the connectivity and
-    computing the new weight as the lowest wieght of all connections
+    computing the new weight as the lowest weight of all connections
     '''
     g0 = G.copy()
     for node in G.nodes:
@@ -88,43 +80,8 @@ def simplifyGraphWithPredicate(G: networkx.DiGraph, nodeToCluster):
             g0.remove_node(node)
     return g0
 
-# Get some multidigraph from openstreetmap and simplifies it
-rawGraph = osmnx.graph_from_place("Chambery, France", network_type="drive")
-projGraph = osmnx.project_graph(rawGraph)
-osmGraph = osmnx.consolidate_intersections(projGraph, rebuild_graph=True, tolerance=30, dead_ends=True)
-print(osmGraph)
-
-# plot the street network with folium
-m1 = osmnx.plot_graph_folium(osmGraph, popup_attribute="name", weight=2, color="#8b0000")
-m1.save('osmGraph.html')
-
-# convert it to digraph, keeping shortest route each time
-graph = convertToDiGraph(osmGraph)
-print(graph)
-
-# extract node coordinates
-node_coords = {}
-for n in graph._node:
-    node_coords[n] = (osmGraph._node[n]['x'], osmGraph._node[n]['y'])
-
-# clusterize graph
-clusters, nodeToCluster = clusterize(graph, node_coords, 3,3)
-displayClusteredNodes(graph, node_coords, clusters)
-plt.show()
-
-# simplify graph
-simpleGraph = simplifyGraphWithPredicate(graph, nodeToCluster)
-print(simpleGraph)
-simpleClusters = []
-for c in clusters:
-    simpleClusters.append([n for n in c if n in simpleGraph.nodes()])
-displayClusteredNodes(simpleGraph, node_coords, simpleClusters)
-plt.show()
-
-
-def clusteredToRegularGraph(G, clusters):
-    '''create a regular graph from a clusterd graph 5.2.2 of the thesis'''
-    P2 = 8000*len(clusters) # sth > min Tour len * nb subclusters
+def clusteredToRegularGraph(G, completeG, clusters):
+    '''create a regular graph from a clustered graph 5.2.2 of the thesis'''
     H = networkx.Graph()
     # same nodes
     for node in G.nodes(): H.add_node(node)
@@ -132,7 +89,8 @@ def clusteredToRegularGraph(G, clusters):
     for cluster in clusters:
         for i in range(1, len(cluster)):
             H.add_edge(cluster[i-1], cluster[i], weight=0)
-        H.add_edge(cluster[-1], cluster[0], weight=0)
+        if len(cluster) > 1:
+            H.add_edge(cluster[-1], cluster[0], weight=0)
     # edges from subcluster to other subclusters
     for a in range(len(clusters)):
         for b in range(len(clusters)):
@@ -141,8 +99,10 @@ def clusteredToRegularGraph(G, clusters):
                 n1 = clusters[a][i1]
                 np1 = clusters[a][i1-1] if i1 > 0 else clusters[a][-1]
                 for n2 in clusters[b]:
-                    if n2 in G[n1]:
-                        H.add_edge(n1, n2, weight=G[n1][n2]['weight'])
+                    if n2 in G[np1]:
+                        path = osmnx.distance.shortest_path(completeG, n1, n2)
+                        if path:
+                            H.add_edge(np1, n2, weight=sum([completeG[path[i]][path[i+1]]['weight'] for i in range(len(path)-1)]))
     return H
 
 def regularToClusterRoute(HRoute, nodeToCluster):
@@ -157,35 +117,3 @@ def regularToClusterRoute(HRoute, nodeToCluster):
             GRoute.append(v)
             lastclus = clus
     return GRoute
-
-def displayGraphWithRoute(G, clusters, node_coords, route):
-    '''Displays a cluster graph with each cluster in a different color
-       and traces the given route on top'''
-    pairRoute = list(networkx.utils.pairwise(route))
-    displayClusteredNodes(G, node_coords, clusters)
-    networkx.draw_networkx_edges(H, node_coords, pairRoute, node_size=0, width=1)
-    plt.show()
-
-def displayGraphWithEdges(G, clusters, node_coords):
-    '''Displays a cluster graph with each cluster in a different color
-       and traces the given route on top'''
-    displayClusteredNodes(G, node_coords, clusters)
-    networkx.draw_networkx_edges(G, node_coords, node_size=0, width=1)
-    plt.show()
-
-displayGraphWithEdges(simpleGraph, simpleClusters, node_coords)
-    
-# create equivalent, non clusterd graph
-H = clusteredToRegularGraph(simpleGraph, simpleClusters)
-
-# compute best route in regular graph
-HRoute = networkx.approximation.traveling_salesman_problem(H, cycle=False)
-
-# display best route in regular graph
-displayGraphWithRoute(simpleGraph, simpleClusters, node_coords, HRoute)
-
-# get route in original clustered graph
-GRoute = regularToClusterRoute(HRoute, nodeToCluster)
-
-# display route
-displayGraphWithRoute(simpleGraph, simpleClusters, node_coords, GRoute)
