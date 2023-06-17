@@ -4,11 +4,11 @@ import sys, os
 import networkx
 import matplotlib.pyplot as plt
 
-from RoadNetSimplifier import convertToDiGraph
+from RoadNetSimplifier import convertToDiGraph, simplifyGraphWithPredicate
 from cluster import Cluster
 
-basename = "Versoix" # Play
-tol = "20k"
+basename = "Swiss" # Play
+tol = ""
 tolerance = 20000
 subtolerance = 25
 center = 46.3228088,6.2205695 # 47.3774417,8.5367355 - Zurich
@@ -74,18 +74,51 @@ def convert(osmGraph, tol):
     clusters = [[] for n in range(len(clusterDefs))]
     nodeToCluster = {}
     curClus = None
+    dropped = []
     for n in graph._node:
         coords = (osmGraph._node[n]['x'], osmGraph._node[n]['y'])
         c = getCluster(coords, curClus, clusterDefs)
         if c is None:
+            dropped.append(n)
             continue # ignore that node, it's not inside the region of interest
         node_coords[n] = coords
         clusters[c.number].append(n)
         nodeToCluster[n] = c.number
         curClus = c
+    # cleanup original graph
+    for n in dropped:
+        graph.remove_node(n)
     with open(getName('DiGraph', tol), 'wb') as file:
         pickle.dump((graph, node_coords, clusters, nodeToCluster), file)
     return graph, node_coords, clusters, nodeToCluster
+
+def simplify(graph, node_coords, clusters, nodeToClusters, tol):
+    print ('Simplifying graph')
+    # implify step by step or the number of edges skyrockets and everything is slow
+    sg = simplifyGraphWithPredicate(graph, nodeToClusters, 20)
+    print(sg)
+    sg = simplifyGraphWithPredicate(sg, nodeToClusters, 50)
+    print(sg)
+    sg = simplifyGraphWithPredicate(sg, nodeToClusters, 100)
+    print(sg)
+    sg = simplifyGraphWithPredicate(sg, nodeToClusters, 200)
+    print(sg)
+    sg = simplifyGraphWithPredicate(sg, nodeToClusters, None)
+    print(sg)
+    scoords = {n:c for n,c in node_coords.items() if n in sg}
+    simpleClusters = []
+    for c in clusters:
+        simpleClusters.append([n for n in c if n in sg.nodes()])
+    snodeToClusters = {n:c for n,c in nodeToClusters.items() if n in sg}
+    with open(getName('SimpleGraph', tol), 'wb') as file:
+        pickle.dump((sg, scoords, simpleClusters, snodeToClusters), file)
+    return sg, scoords, simpleClusters, snodeToClusters
+
+def computeDists(graph, tol):
+    distances = dict(networkx.shortest_path_length(sg, weight='weight'))
+    with open(getName('Distances', tol), 'wb') as file:
+        pickle.dump(distances, file)
+    return distances
 
 def getRaw(tol):
     name = getName("Dump", tol)
@@ -115,12 +148,39 @@ def getDiGraph(tol):
     else:
         return convert(getConsolidated(tol), tol)
 
-graph, node_coords, clusters, nodeToClusters = getDiGraph(tol)
-print (graph)
+def getSimpleGraph(tol):
+    name = getName('SimpleGraph', tol)
+    if checkFile(name):
+        return load(name)
+    else:
+        return simplify(*getDiGraph(tol), tol)
 
+def getDistances(tol):
+    name = getName('Distances', tol)
+    if checkFile(name):
+        return load(name)
+    else:
+        sg, snode_coords, simpleClusters, snodeToClusters = getSimpleGraph(tol)
+        return computeDists(sg, tol)
+    
+    
 colors=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
-for n in range(len(clusters)):
-    networkx.draw_networkx_nodes(graph, node_coords, clusters[n], node_size=20, node_color=colors[n%len(colors)])
-#networkx.draw_networkx_edges(graph, node_coords, node_size=0, width=1)
+
+# graph, node_coords, clusters, nodeToClusters = getDiGraph(tol)
+# print (graph)
+# plt.figure(1)
+# for n in range(len(clusters)):
+#     networkx.draw_networkx_nodes(graph, node_coords, clusters[n], node_size=20, node_color=colors[n%len(colors)])
+
+sg, snode_coords, simpleClusters, snodeToClusters = getSimpleGraph(tol)
+print(sg)
+plt.figure(2)
+for n in range(len(simpleClusters)):
+    networkx.draw_networkx_nodes(sg, snode_coords, simpleClusters[n], node_size=20, node_color=colors[n%len(colors)])
+#networkx.draw_networkx_edges(sg, snode_coords, node_size=0, width=1)
+
+# build full table of weights
+distances = getDistances(tol)
+
 plt.show()
 

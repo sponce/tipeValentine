@@ -67,14 +67,15 @@ def breed(parent1, parent2):
 
     for i in range(startGene, endGene):
         filsP1.append(parent1[i])
-        
-    filsP2 = [item for item in parent2 if item not in filsP1]
+
+    clusFilsP1 = [nodeToCluster[item] for item in filsP1]
+    filsP2 = [item for item in parent2 if nodeToCluster[item] not in clusFilsP1]
 
     fils = filsP1 + filsP2
     return fils
 
 def breedPopulation(matingpool, eliteSize, extraSize):
-    print("BEF", len(matingpool))
+    #print("BEF", len(matingpool))
     children = []
     length = len(matingpool) - eliteSize + extraSize
     pool = random.sample(matingpool, len(matingpool))
@@ -86,10 +87,10 @@ def breedPopulation(matingpool, eliteSize, extraSize):
         child = breed(pool[i], pool[len(matingpool)-i-1])
         #print('breeding',pool[i],pool[len(matingpool)-i-1],child)
         children.append(child)
-    print("AFT", len(children))
+    #print("AFT", len(children))
     return children
 
-def mutate(route, mutationRate):
+def mutate(route, mutationRate, clusterMutationRate):
     for swapped in range(len(route)):
         if(random.random() < mutationRate):
             swapWith = int(random.random() * len(route))
@@ -99,12 +100,19 @@ def mutate(route, mutationRate):
             
             route[swapped] = city2
             route[swapWith] = city1
+        if random.random() < clusterMutationRate:
+            # take another city in the same cluster
+            clus = nodeToCluster[route[swapped]]
+            #oldplace = route[swapped]
+            #oldL = Fitness(route).distance
+            route[swapped] = random.choice(clusters[clus])
+            #print(oldplace, oldL, route[swapped], Fitness(route).distance)
     return route
 
-def mutatePopulation(population, mutationRate):
+def mutatePopulation(population, mutationRate, clusterMutationRate):
     mutatedPop = []
     for route in range(0, len(population)):
-        mutatedInd = mutate(population[route], mutationRate)
+        mutatedInd = mutate(population[route], mutationRate, clusterMutationRate)
         mutatedPop.append(mutatedInd)
     return mutatedPop
 
@@ -126,19 +134,19 @@ totalsize=400
 eliteSize=100
 breedingExtraSize=100
 population=[createRoute(clusters) for i in range(totalsize)]
-n=80
+n=8000
 MeilleurChemin = (0, 9999999)
 for i in range (n):
-    print("S1", len(population))
+    #print("S1", len(population))
     parcours_trie=Tri_Parcours(population)
     if parcours_trie[0][1] < MeilleurChemin[1]:
         MeilleurChemin = (population[parcours_trie[0][0]].copy(), parcours_trie[0][1])
-        print(MeilleurChemin[1], parcours_trie[0][1])
+        print (MeilleurChemin)
     matingpool=selection(parcours_trie,eliteSize,totalsize)
-    print("S2", len(matingpool))
+    #print("S2", len(matingpool))
     new_pop=breedPopulation(matingpool, eliteSize, breedingExtraSize)
-    print("S3", len(new_pop))
-    population=mutatePopulation (new_pop,0.01)
+    #print("S3", len(new_pop))
+    population=mutatePopulation (new_pop,0.04,0.2)
 
 colors=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
 for n in range(len(clusters)):
