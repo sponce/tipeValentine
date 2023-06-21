@@ -120,7 +120,8 @@ def createRoute(clusters):
     # pick one city per cluster and randomize the order
     route = []
     for c in clusters:
-        route.append(random.choice(c))
+        if len(c) > 0:
+            route.append(random.choice(c))
     return random.sample(route, len(route))
 
 # load data from SmallProblem
