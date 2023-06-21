@@ -93,6 +93,17 @@ def mutate(route, mutationRate, clusterMutationRate):
             #oldL = Fitness(route).distance
             route[swapped] = random.choice(clusters[clus])
             #print(oldplace, oldL, route[swapped], Fitness(route).distance)
+        for other in range(swapped+2, min(swapped+6, len(route)-1)):
+            # 2-opt
+            i1 = route[swapped]
+            i2 = route[swapped+1]
+            j1 = route[other]
+            j2 = route[other+1]
+            gain = distances[i1][i2] + distances[j1][j2] - distances[i1][j1] - distances[i2][j2]
+            if gain > 0:
+                r = route[swapped+1]
+                route[swapped+1] = route[other]
+                route[other] = r
     return route
 
 def mutatePopulation(population, mutationRate, clusterMutationRate):
