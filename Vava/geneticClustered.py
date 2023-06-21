@@ -136,12 +136,15 @@ eliteSize=100
 breedingExtraSize=100
 population=[createRoute(clusters) for i in range(totalsize)]
 n=8000
-MeilleurChemin = (0, 9999999)
+MeilleursChemins = []
+nDisplay=1
+
 for i in range (n):
     #print("S1", len(population))
     parcours_trie=Tri_Parcours(population)
-    if parcours_trie[0][1] < MeilleurChemin[1]:
+    if len(MeilleursChemins) == 0 or parcours_trie[0][1] < MeilleursChemins[-1][1]:
         MeilleurChemin = (population[parcours_trie[0][0]].copy(), parcours_trie[0][1])
+        MeilleursChemins.append(MeilleurChemin)
         print (MeilleurChemin)
     matingpool=selection(parcours_trie,eliteSize,totalsize)
     #print("S2", len(matingpool))
@@ -150,9 +153,12 @@ for i in range (n):
     population=mutatePopulation (new_pop,0.04,0.2)
 
 colors=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
-for n in range(len(clusters)):
-    networkx.draw_networkx_nodes(ng, ncoords, clusters[n], node_size=20, node_color=colors[n%len(colors)])
-pairRoute = list(networkx.utils.pairwise(MeilleurChemin[0]))
-networkx.draw_networkx_edges(ng, ncoords, pairRoute, node_size=0, width=1)
 
-plt.show()
+for c in MeilleursChemins[-nDisplay:]:
+    for n in range(len(clusters)):
+        networkx.draw_networkx_nodes(ng, ncoords, clusters[n], node_size=20, node_color=colors[n%len(colors)])
+    pairRoute = list(networkx.utils.pairwise(c[0]))
+    networkx.draw_networkx_edges(ng, ncoords, pairRoute, node_size=0, width=1)
+    #for n in c[0]:
+    #    networkx.draw_networkx_nodes(ng, ncoords, [n], node_size=40, node_color=colors[nodeToCluster[n]%len(colors)])    
+    plt.show()
