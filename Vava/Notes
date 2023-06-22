@@ -1,0 +1,67 @@
+createGRaph.py
+==============
+
+there are a number of steps there to extract useful data from original osmnx tools
+getSimpleGraph will just spit it out... after some time !
+All steps cache results to files and read those files if present rather than recomputing
+
+getRaw
+------
+  Loads data form osmnx if needed
+    - either using graphName if the region has a name
+    - or from center + tolerance for a disk around a known place
+  Stores results in pkl format, or loads from there if it already exists
+  Resulting file ends with "Dump.pkl"
+  This is long and takes quite some memory, you need a fast machine
+
+getProjected
+------------
+  - projects data coming out from getRaw or read from file if already present
+  - stores results in pkl format, file name ending with "Projected.pkl"
+
+getConsolidated
+---------------
+  - consolidates data coming out from getProjected or read from file if already present
+  - this simplifes the graph with a given "subtolerance". Defaults to 25m
+  - stores results in pkl format, file name ending with "Consolidated.pkl"
+
+getDigraph
+----------
+  - convert to digraph data coming out from getConsolidated or read from file if already present
+  - creates a digraph out and a table of node_coordinates
+  - also split the nodes of the new graph into clusters by canton, using the polys created by extractCantonsPolys.py
+  - stores the tuple graph, node_coords, clusters, noToCluster dict  into a pkl file ending with "DiGraph.pkl"
+
+getSimpleGraph
+--------------
+  - simplify graph coming out from getDiGraph or read from file if already present
+  - drops all internal nodes for all clusters (a list of exceptions can be given).
+    Internal nodes are nodes with only connections within the cluster
+  - stores the tuple simplified graph, node_coords, clusters and nodeToCluster dict into a pkl file ending with "SimpleGraph.pkl"
+
+getDistances
+------------
+  - compute all distances in simplified graph coming out of getSimpleGraph or read from file if already present
+  - stores the double entry dict into a pkl file ending with "Distances.pkl"
+
+
+createSmalleProblem.py
+======================
+
+loads the swiss full graph and reduces it to few cantons to make a small problem, easier to debug
+
+
+extractCantonsPolys.py
+======================
+
+creates a disctionnary name -> cluster for each canton of switzerland
+Starting from swissBOUNDARIES3D_1_3_TLM_KANTONSGEBIET.geojson file
+a cluster is a name, a number and a set of polynoms defining it
+
+Stores the dictionnary in a pkl file called CantonsPolys.pkl
+
+
+geneticClustered.py
+===================
+
+solves the switzerland clustered problem with genetic algo

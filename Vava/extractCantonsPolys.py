@@ -23,5 +23,5 @@ for feat in data['features']:
     for string in coords:
         canton.addPoly([ (lat,lon) for lat,lon,alt in string])
     
-with open("CantonPolys", 'wb') as file:
+with open("CantonPolys.pkl", 'wb') as file:
     pickle.dump(nameToCanton, file)

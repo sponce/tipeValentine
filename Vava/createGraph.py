@@ -12,6 +12,7 @@ tol = ""
 tolerance = 20000
 subtolerance = 25
 center = 46.3228088,6.2205695 # 47.3774417,8.5367355 - Zurich
+graphName = "" #"Switzerland"
 
 def getName(step, tol="20k"):
     return "%s%s%s.pkl" % (basename, step, tol)
@@ -25,13 +26,16 @@ def load(name):
         return pickle.load(file)
 
 def loadPolys():
-    with open("CantonPolys", 'rb') as file:
+    with open("CantonPolys.pkl", 'rb') as file:
         return pickle.load(file)
 
 def get(tol):
     print ('Getting data')
-    poly = osmnx.utils_geo.bbox_to_poly(*osmnx.utils_geo.bbox_from_point(center, tolerance))
-    rawGraph = osmnx.graph.graph_from_polygon(poly, network_type="bike")
+    if graphName != '':
+        rawGraph = osmnx.graph_from_place("Switzerland", network_type="bike")
+    else:
+        poly = osmnx.utils_geo.bbox_to_poly(*osmnx.utils_geo.bbox_from_point(center, tolerance))
+        rawGraph = osmnx.graph.graph_from_polygon(poly, network_type="bike")
     with open(getName("Dump", tol), 'wb') as file:
         pickle.dump(rawGraph, file)
     return rawGraph
