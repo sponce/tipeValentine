@@ -7,7 +7,7 @@ from RoadNetSimplifier import IsNodeInternalToCluster
 # This starts from the full swiss problem and keeps only 5 cantons, namely
 keptNames = ['Bern', 'Valais', 'Vaud', 'Fribourg', 'Genève']
 
-with open("CantonPolys", 'rb') as file:
+with open("CantonPolys.pkl", 'rb') as file:
     cantons = pickle.load(file)
 
 keptNumbers = []

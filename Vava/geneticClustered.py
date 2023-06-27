@@ -122,9 +122,9 @@ def createRoute(clusters):
     return random.sample(route, len(route))
 
 # load data from SmallProblem
-with open("SmallPbSimpleGraph.pkl", 'rb') as file:
+with open("SwissSimpleGraph.pkl", 'rb') as file:
     ng, ncoords, clusters, nodeToCluster = pickle.load(file)
-with open("SmallPbDistances.pkl", 'rb') as file:
+with open("SwissDistances.pkl", 'rb') as file:
     distances = pickle.load(file)
 
 Citylist=ng.nodes()
@@ -132,7 +132,7 @@ totalsize=400
 eliteSize=100
 breedingExtraSize=100
 population=[createRoute(clusters) for i in range(totalsize)]
-n=8000
+n=2000
 MeilleursChemins = []
 nDisplay=1
 
