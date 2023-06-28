@@ -126,6 +126,8 @@ with open("SwissSimpleGraph.pkl", 'rb') as file:
     ng, ncoords, clusters, nodeToCluster = pickle.load(file)
 with open("SwissDistances.pkl", 'rb') as file:
     distances = pickle.load(file)
+with open("CantonPolys.pkl", 'rb') as file:
+    polys = list(pickle.load(file).values())
 
 Citylist=ng.nodes()
 totalsize=400
@@ -149,11 +151,39 @@ for i in range (n):
     #print("S3", len(new_pop))
     population=mutatePopulation (new_pop,0.04,0.2)
 
+
+
+from matplotlib.path import Path
+from matplotlib.patches import PathPatch
+from matplotlib.collections import PatchCollection
+
+# Plots a Polygon to pyplot `ax`
+def plot_polygon(ax, poly, **kwargs):
+    path = Path.make_compound_path(
+        Path(np.asarray(poly.exterior.coords)[:, :2]),
+        *[Path(np.asarray(ring.coords)[:, :2]) for ring in poly.interiors])
+    patch = PathPatch(path, **kwargs)
+    collection = PatchCollection([patch], **kwargs)    
+    ax.add_collection(collection, autolim=True)
+
+
+def lighter(hex_color, perc=0.7):
+    """ takes a color like #87c95f and produces a lighter or darker variant """
+    rgb_hex = [int(hex_color[x:x+2], 16) for x in [1, 3, 5]]
+    new_rgb_int = [c + int(perc*(255-c)) for c in rgb_hex]
+    return "#" + "".join([hex(i)[2:] for i in new_rgb_int])
+    
 colors=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+
+fig, ax = plt.subplots()
 
 for c in MeilleursChemins[-nDisplay:]:
     for n in range(len(clusters)):
-        networkx.draw_networkx_nodes(ng, ncoords, clusters[n], node_size=20, node_color=colors[n%len(colors)])
+        color = colors[n%len(colors)]
+        networkx.draw_networkx_nodes(ng, ncoords, clusters[n], node_size=20, node_color=color)
+        lightcolor = lighter(color)
+        for poly in polys[n].polys:
+            plot_polygon(ax, poly, color=lightcolor)
     pairRoute = list(networkx.utils.pairwise(c[0]))
     networkx.draw_networkx_edges(ng, ncoords, pairRoute, node_size=0, width=1)
     #for n in c[0]:
