@@ -2,7 +2,7 @@ import numpy as np,random,operator, matplotlib.pyplot as plt
 from pylab import figure,plot,show
 import pickle
 import networkx
-   
+
 class Fitness:
     def __init__(self, route):
         self.route = route
@@ -39,8 +39,8 @@ def breed(parent1, parent2):
     filsP1 = []
     filsP2 = []
     
-    geneA = int(random.random() * len(parent1))
-    geneB = int(random.random() * len(parent1))
+    geneA = int(random.random() * (len(parent1)-1))
+    geneB = int(random.random() * (len(parent1)-1))
     while geneA==geneB:
         geneB = int(random.random() * len(parent1))
     #print('gene',geneA,geneB)
@@ -74,9 +74,9 @@ def breedPopulation(matingpool, eliteSize, extraSize):
     return children
 
 def mutate(route, mutationRate, clusterMutationRate):
-    for swapped in range(len(route)):
+    for swapped in range(len(route)-1): # preserve bern as last point
         if(random.random() < mutationRate):
-            swapWith = int(random.random() * len(route))
+            swapWith = int(random.random() * (len(route)-1))
             #print('mutate',swapped,swapWith)
             city1 = route[swapped]
             city2 = route[swapWith]
@@ -85,7 +85,7 @@ def mutate(route, mutationRate, clusterMutationRate):
             route[swapWith] = city1
         if random.random() < clusterMutationRate and \
            route[swapped] not in protectedItems and \
-           swapped > 0 and swapped < len(route)-1:
+           swapped > 0 and swapped < len(route)-2:
             # take best city in the same cluster
             clus = nodeToCluster[route[swapped]]
             i0 = route[swapped-1]
@@ -120,15 +120,21 @@ def mutatePopulation(population, mutationRate, clusterMutationRate):
 
 def createRoute(clusters):
     # pick one city per cluster and randomize the order
+    # make sure Bern is last
     route = []
     for c in clusters:
         if len(c) > 3:
             route.append(random.choice(c))
         else:
-            route.extend(c)
-    return random.sample(route, len(route))
+            for n in c:
+                if n != bern:
+                    route.append(n)
+    return random.sample(route, len(route)) + [bern]
 
 # load data from SmallProblem
+print("Loading data...")
+with open("SwissDiGraph.pkl", 'rb') as file:
+    g, coords, _, _, osmidToNode = pickle.load(file)
 with open("SwissSimpleGraph.pkl", 'rb') as file:
     ng, ncoords, clusters, nodeToCluster = pickle.load(file)
 with open("SwissDistances.pkl", 'rb') as file:
@@ -136,6 +142,7 @@ with open("SwissDistances.pkl", 'rb') as file:
 with open("CantonPolys.pkl", 'rb') as file:
     polys = list(pickle.load(file).values())
 
+bern = osmidToNode[33202504]
 Citylist=ng.nodes()
 totalsize=400
 eliteSize=100
@@ -190,9 +197,7 @@ colors = [matplotlib.colors.to_hex(plt.cm.tab20(i)) for i in range(20)]
 
 fig, ax = plt.subplots()
 
-with open("SwissDiGraph.pkl", 'rb') as file:
-    g, coords, c, n2c, osmidToNode = pickle.load(file)
-
+print ("Meilleur chemin : ", MeilleursChemins[1][0])
 for c in MeilleursChemins[-nDisplay:]:
     for n in range(len(clusters)):
         color = colors[n%len(colors)]
