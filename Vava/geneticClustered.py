@@ -34,10 +34,6 @@ def selection (parcours_trie,eliteSize,totalSize):
             if len(selectionResults) == totalSize: break
     return selectionResults
 
-def createRoute(cityList):
-    route = random.sample(cityList, len(cityList))
-    return route
-
 def breed(parent1, parent2):
     fils = []
     filsP1 = []
