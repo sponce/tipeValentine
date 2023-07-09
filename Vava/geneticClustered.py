@@ -86,10 +86,20 @@ def mutate(route, mutationRate, clusterMutationRate):
             
             route[swapped] = city2
             route[swapWith] = city1
-        if random.random() < clusterMutationRate:
-            # take another city in the same cluster
+        if random.random() < clusterMutationRate and \
+           swapped > 0 and swapped < len(route)-1:
+            # take best city in the same cluster
             clus = nodeToCluster[route[swapped]]
-            route[swapped] = random.choice(clusters[clus])
+            i0 = route[swapped-1]
+            i1 = route[swapped]
+            i2 = route[swapped+1]
+            dorig = distances[i0][i1] + distances[i1][i2]
+            for nc in clusters[clus]:
+                if nc != route[swapped]:
+                    newd = distances[i0][nc] + distances[nc][i2]
+                    if newd < dorig:
+                        route[swapped] = nc
+                        dorig = newd
         for other in range(swapped+2, min(swapped+6, len(route)-1)):
             # 2-opt
             i1 = route[swapped]
