@@ -51,7 +51,8 @@ def breed(parent1, parent2):
         filsP1.append(parent1[i])
 
     clusFilsP1 = [nodeToCluster[item] for item in filsP1]
-    filsP2 = [item for item in parent2 if nodeToCluster[item] not in clusFilsP1]
+    filsP2 = [item for item in parent2 if (nodeToCluster[item] not in clusFilsP1 or
+                                           (item in protectedItems and item not in filsP1))]
 
     fils = filsP1 + filsP2
     return fils
@@ -83,6 +84,7 @@ def mutate(route, mutationRate, clusterMutationRate):
             route[swapped] = city2
             route[swapWith] = city1
         if random.random() < clusterMutationRate and \
+           route[swapped] not in protectedItems and \
            swapped > 0 and swapped < len(route)-1:
             # take best city in the same cluster
             clus = nodeToCluster[route[swapped]]
@@ -120,8 +122,10 @@ def createRoute(clusters):
     # pick one city per cluster and randomize the order
     route = []
     for c in clusters:
-        if len(c) > 0:
+        if len(c) > 3:
             route.append(random.choice(c))
+        else:
+            route.extend(c)
     return random.sample(route, len(route))
 
 # load data from SmallProblem
@@ -140,6 +144,10 @@ population=[createRoute(clusters) for i in range(totalsize)]
 n=200
 MeilleursChemins = []
 nDisplay=1
+protectedItems = []
+for c in clusters:
+    if len(c) < 4:
+        protectedItems.extend(c)
 
 print("Longueur du plus court chemin pour l'instant :")
 for i in range (n):

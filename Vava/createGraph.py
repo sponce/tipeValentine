@@ -67,10 +67,16 @@ def getCluster(coords, hint, clusters):
             return cluster
     return None
 
+clusterDefs = loadPolys().values()
+
+protectedPlaces = {'Velosophe': (871856370, 'Canton de Genève'), 'Chocolarium': (5254387475, 'Kanton St. Gallen'), 'Cheese shop': (1353117360, 'Canton de Fribourg'), 'Butcher shop': (3041241876, 'Kanton Wallis'), 'Maison de la tete de moine': (4554362977, 'Kanton Bern'), 'Salami shop': (3023156148, 'Canton Ticino'), 'BackeryKeller': (264562811, 'Kanton St. Gallen'), 'BERN': (33202504, 'Kanton Bern')}
+protectedNodes = [a for a,b in protectedPlaces.values()]
+
 def convertToDiGraph(osmGraph):
     '''converts a multipleDiGraph to a diGraph
        and drops edges with identical src and dst'''
     graph = networkx.DiGraph()
+    osmidToNode = {}
     for u,v,data in osmGraph.edges(data=True):
         if u == v: continue
         w = data['length']
@@ -78,12 +84,22 @@ def convertToDiGraph(osmGraph):
             graph[u][v]['weight'] = min(w, graph[u][v]['weight'])
         else:
             graph.add_edge(u, v, weight=w)
-    return graph
+    for n in osmGraph._node:
+        l = osmGraph._node[n]['osmid_original']
+        if isinstance(l, str):
+            for ll in [int(c) for c in l[1:-1].split(',')]:
+                for p in protectedNodes:
+                    if p == ll:
+                        osmidToNode[p] = n
+        else:
+            for p in protectedNodes:
+                if p == l:
+                    osmidToNode[p] = n
+    return graph, osmidToNode
 
 def convert(osmGraph, tol):
-    clusterDefs = loadPolys().values()
     print ('Creating DiGraph')
-    graph = convertToDiGraph(osmGraph)
+    graph, osmidToNode = convertToDiGraph(osmGraph)
     print(graph)
     print ('Extracting node coordinates')
     node_coords = {}
@@ -105,8 +121,8 @@ def convert(osmGraph, tol):
     for n in dropped:
         graph.remove_node(n)
     with open(getName('DiGraph', tol), 'wb') as file:
-        pickle.dump((graph, node_coords, clusters, nodeToCluster), file)
-    return graph, node_coords, clusters, nodeToCluster
+        pickle.dump((graph, node_coords, clusters, nodeToCluster, osmidToNode), file)
+    return graph, node_coords, clusters, nodeToCluster, osmidToNode
 
 def IsNodeInternalToCluster(G: networkx.DiGraph, node, nodeToCluster):
     c = nodeToCluster[node]
@@ -118,14 +134,15 @@ def IsNodeInternalToCluster(G: networkx.DiGraph, node, nodeToCluster):
             return False
     return True
 
-def simplifyGraph(G: networkx.DiGraph, nodeToCluster, maxCon=None):
+def simplifyGraph(G: networkx.DiGraph, nodeToCluster, droppedClusters, protectedOsmId, maxCon=None):
     '''
     Remove internal nodes of each cluster, keeping the connectivity and
     computing the new weight as the lowest weight of all connections
     '''
     g0 = G.copy()
     for node in G.nodes:
-        if IsNodeInternalToCluster(g0, node, nodeToCluster):
+        if node in protectedOsmId: continue
+        if nodeToCluster[node] in droppedClusters or IsNodeInternalToCluster(g0, node, nodeToCluster):
             in_edges_containing_node = list(g0.in_edges(node))
             out_edges_containing_node = list(g0.out_edges(node))
             if maxCon and (len(set(in_edges_containing_node + out_edges_containing_node)) > maxCon): continue
@@ -143,22 +160,27 @@ def simplifyGraph(G: networkx.DiGraph, nodeToCluster, maxCon=None):
             g0.remove_node(node)
     return g0
 
-def simplify(graph, node_coords, clusters, nodeToClusters, tol):
+def simplify(graph, node_coords, clusters, nodeToClusters, osmidToNode, tol):
+    print(osmidToNode)
     print ('Simplifying graph')
+    protectedOsmId = [osmidToNode[id] for id in protectedNodes]
+    droppedClusters = [getCluster(node_coords[osmidToNode[a]], None, clusterDefs).number for a in protectedNodes]
     # implify step by step or the number of edges skyrockets and everything is slow
-    sg = simplifyGraph(graph, nodeToClusters, 20)
+    sg = simplifyGraph(graph, nodeToClusters, droppedClusters, protectedOsmId, 20)
     print(sg)
-    sg = simplifyGraph(sg, nodeToClusters, 50)
+    sg = simplifyGraph(sg, nodeToClusters, droppedClusters, protectedOsmId, 50)
     print(sg)
-    sg = simplifyGraph(sg, nodeToClusters, 100)
+    sg = simplifyGraph(sg, nodeToClusters, droppedClusters, protectedOsmId, 100)
     print(sg)
-    sg = simplifyGraph(sg, nodeToClusters, 200)
+    sg = simplifyGraph(sg, nodeToClusters, droppedClusters, protectedOsmId, 200)
     print(sg)
-    sg = simplifyGraph(sg, nodeToClusters, 400)
+    sg = simplifyGraph(sg, nodeToClusters, droppedClusters, protectedOsmId, 400)
     print(sg)
-    sg = simplifyGraph(sg, nodeToClusters, 600)
+    sg = simplifyGraph(sg, nodeToClusters, droppedClusters, protectedOsmId, 600)
     print(sg)
-    sg = simplifyGraph(sg, nodeToClusters, None)
+    sg = simplifyGraph(sg, nodeToClusters, droppedClusters, protectedOsmId, 800)
+    print(sg)
+    sg = simplifyGraph(sg, nodeToClusters, droppedClusters, protectedOsmId, None)
     print(sg)
     scoords = {n:c for n,c in node_coords.items() if n in sg}
     simpleClusters = []
