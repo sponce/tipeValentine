@@ -145,13 +145,14 @@ n=200
 MeilleursChemins = []
 nDisplay=1
 
+print("Longueur du plus court chemin pour l'instant :")
 for i in range (n):
     #print("S1", len(population))
     parcours_trie=Tri_Parcours(population)
     if len(MeilleursChemins) == 0 or parcours_trie[0][1] < MeilleursChemins[-1][1]:
         MeilleurChemin = (population[parcours_trie[0][0]].copy(), parcours_trie[0][1])
         MeilleursChemins.append(MeilleurChemin)
-        print (MeilleurChemin, len(MeilleurChemin[0]))
+        print ("%f km" % (MeilleurChemin[1]/1000))
     matingpool=selection(parcours_trie,eliteSize,totalsize)
     #print("S2", len(matingpool))
     new_pop=breedPopulation(matingpool, eliteSize, breedingExtraSize)
@@ -195,10 +196,13 @@ for c in MeilleursChemins[-nDisplay:]:
         lightcolor = lighter(color)
         for poly in polys[n].polys:
             plot_polygon(ax, poly, color=lightcolor)
-        # draw nodes we've used
-        networkx.draw_networkx_nodes(ng, ncoords, clusters[n], node_size=20, node_color=color)
     # Draw route
     route = [c[0][0]]
+    # draw main nodes
+    for node in c[0]:
+        color = colors[nodeToCluster[node]%len(colors)]
+        networkx.draw_networkx_nodes(ng, ncoords, [node], node_size=20, node_color=color)
+    # draw all path
     pairRoute = list(networkx.utils.pairwise(c[0]))
     for a,b in pairRoute:
         route.extend(networkx.shortest_path(g, a, b)[1:])
