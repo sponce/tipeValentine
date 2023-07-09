@@ -4,7 +4,6 @@ import sys, os
 import networkx
 import matplotlib.pyplot as plt
 
-from RoadNetSimplifier import convertToDiGraph, simplifyGraphWithPredicate
 from cluster import Cluster
 
 basename = "Swiss" # Play
@@ -68,6 +67,19 @@ def getCluster(coords, hint, clusters):
             return cluster
     return None
 
+def convertToDiGraph(osmGraph):
+    '''converts a multipleDiGraph to a diGraph
+       and drops edges with identical src and dst'''
+    graph = networkx.DiGraph()
+    for u,v,data in osmGraph.edges(data=True):
+        if u == v: continue
+        w = data['length']
+        if graph.has_edge(u,v):
+            graph[u][v]['weight'] = min(w, graph[u][v]['weight'])
+        else:
+            graph.add_edge(u, v, weight=w)
+    return graph
+
 def convert(osmGraph, tol):
     clusterDefs = loadPolys().values()
     print ('Creating DiGraph')
@@ -96,18 +108,57 @@ def convert(osmGraph, tol):
         pickle.dump((graph, node_coords, clusters, nodeToCluster), file)
     return graph, node_coords, clusters, nodeToCluster
 
+def IsNodeInternalToCluster(G: networkx.DiGraph, node, nodeToCluster):
+    c = nodeToCluster[node]
+    for p, _ in G.in_edges(node):
+        if nodeToCluster[p] != c:
+            return False
+    for _, p in G.out_edges(node):
+        if nodeToCluster[p] != c:
+            return False
+    return True
+
+def simplifyGraph(G: networkx.DiGraph, nodeToCluster, maxCon=None):
+    '''
+    Remove internal nodes of each cluster, keeping the connectivity and
+    computing the new weight as the lowest weight of all connections
+    '''
+    g0 = G.copy()
+    for node in G.nodes:
+        if IsNodeInternalToCluster(g0, node, nodeToCluster):
+            in_edges_containing_node = list(g0.in_edges(node))
+            out_edges_containing_node = list(g0.out_edges(node))
+            if maxCon and (len(set(in_edges_containing_node + out_edges_containing_node)) > maxCon): continue
+            for in_src, _ in in_edges_containing_node:
+                for _, out_dst in out_edges_containing_node:
+                    if in_src == out_dst: continue
+                    dist = g0[in_src][node]['weight'] + g0[node][out_dst]['weight']
+                    if out_dst in g0[in_src]:
+                        # if already connected, keep a single connection
+                        g0[in_src][out_dst]['weight'] = min(dist, g0[in_src][out_dst]['weight'])
+                    else:
+                        g0.add_edge(in_src, out_dst, weight=dist)
+                        if nodeToCluster[in_src] != nodeToCluster[out_dst]:
+                            print('AIE', in_src, out_dst, nodeToCluster[in_src], nodeToCluster[out_dst])
+            g0.remove_node(node)
+    return g0
+
 def simplify(graph, node_coords, clusters, nodeToClusters, tol):
     print ('Simplifying graph')
     # implify step by step or the number of edges skyrockets and everything is slow
-    sg = simplifyGraphWithPredicate(graph, nodeToClusters, 20)
+    sg = simplifyGraph(graph, nodeToClusters, 20)
     print(sg)
-    sg = simplifyGraphWithPredicate(sg, nodeToClusters, 50)
+    sg = simplifyGraph(sg, nodeToClusters, 50)
     print(sg)
-    sg = simplifyGraphWithPredicate(sg, nodeToClusters, 100)
+    sg = simplifyGraph(sg, nodeToClusters, 100)
     print(sg)
-    sg = simplifyGraphWithPredicate(sg, nodeToClusters, 200)
+    sg = simplifyGraph(sg, nodeToClusters, 200)
     print(sg)
-    sg = simplifyGraphWithPredicate(sg, nodeToClusters, None)
+    sg = simplifyGraph(sg, nodeToClusters, 400)
+    print(sg)
+    sg = simplifyGraph(sg, nodeToClusters, 600)
+    print(sg)
+    sg = simplifyGraph(sg, nodeToClusters, None)
     print(sg)
     scoords = {n:c for n,c in node_coords.items() if n in sg}
     simpleClusters = []
