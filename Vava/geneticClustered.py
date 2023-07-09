@@ -89,10 +89,7 @@ def mutate(route, mutationRate, clusterMutationRate):
         if random.random() < clusterMutationRate:
             # take another city in the same cluster
             clus = nodeToCluster[route[swapped]]
-            #oldplace = route[swapped]
-            #oldL = Fitness(route).distance
             route[swapped] = random.choice(clusters[clus])
-            #print(oldplace, oldL, route[swapped], Fitness(route).distance)
         for other in range(swapped+2, min(swapped+6, len(route)-1)):
             # 2-opt
             i1 = route[swapped]
@@ -134,7 +131,7 @@ totalsize=400
 eliteSize=100
 breedingExtraSize=100
 population=[createRoute(clusters) for i in range(totalsize)]
-n=2000
+n=200
 MeilleursChemins = []
 nDisplay=1
 
@@ -144,7 +141,7 @@ for i in range (n):
     if len(MeilleursChemins) == 0 or parcours_trie[0][1] < MeilleursChemins[-1][1]:
         MeilleurChemin = (population[parcours_trie[0][0]].copy(), parcours_trie[0][1])
         MeilleursChemins.append(MeilleurChemin)
-        print (MeilleurChemin)
+        print (MeilleurChemin, len(MeilleurChemin[0]))
     matingpool=selection(parcours_trie,eliteSize,totalsize)
     #print("S2", len(matingpool))
     new_pop=breedPopulation(matingpool, eliteSize, breedingExtraSize)
@@ -152,10 +149,10 @@ for i in range (n):
     population=mutatePopulation (new_pop,0.04,0.2)
 
 
-
 from matplotlib.path import Path
 from matplotlib.patches import PathPatch
 from matplotlib.collections import PatchCollection
+import matplotlib.colors
 
 # Plots a Polygon to pyplot `ax`
 def plot_polygon(ax, poly, **kwargs):
@@ -173,19 +170,30 @@ def lighter(hex_color, perc=0.7):
     new_rgb_int = [c + int(perc*(255-c)) for c in rgb_hex]
     return "#" + "".join([hex(i)[2:] for i in new_rgb_int])
     
-colors=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+#colors=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+colors = [matplotlib.colors.to_hex(plt.cm.tab20(i)) for i in range(20)]
 
 fig, ax = plt.subplots()
+
+with open("SwissDiGraph.pkl", 'rb') as file:
+    g, coords, c, n2c, osmidToNode = pickle.load(file)
 
 for c in MeilleursChemins[-nDisplay:]:
     for n in range(len(clusters)):
         color = colors[n%len(colors)]
-        networkx.draw_networkx_nodes(ng, ncoords, clusters[n], node_size=20, node_color=color)
+        # draw cantons
         lightcolor = lighter(color)
         for poly in polys[n].polys:
             plot_polygon(ax, poly, color=lightcolor)
+        # draw nodes we've used
+        networkx.draw_networkx_nodes(ng, ncoords, clusters[n], node_size=20, node_color=color)
+    # Draw route
+    route = [c[0][0]]
     pairRoute = list(networkx.utils.pairwise(c[0]))
-    networkx.draw_networkx_edges(ng, ncoords, pairRoute, node_size=0, width=1)
+    for a,b in pairRoute:
+        route.extend(networkx.shortest_path(g, a, b)[1:])
+    pairRoute = list(networkx.utils.pairwise(route))
+    networkx.draw_networkx_edges(g, coords, pairRoute, node_size=0, width=2, arrows=False)
     #for n in c[0]:
     #    networkx.draw_networkx_nodes(ng, ncoords, [n], node_size=40, node_color=colors[nodeToCluster[n]%len(colors)])    
     plt.show()
