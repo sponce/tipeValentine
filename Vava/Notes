@@ -65,3 +65,4 @@ geneticClustered.py
 ===================
 
 solves the switzerland clustered problem with genetic algo
+then save the track to solution.gpx and solution.ele.gpx with extra elevation data

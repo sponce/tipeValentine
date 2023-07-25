@@ -148,8 +148,8 @@ totalsize=400
 eliteSize=100
 breedingExtraSize=100
 population=[createRoute(clusters) for i in range(totalsize)]
-n=200
-MeilleursChemins = []
+n=500
+MeilleurChemin = None
 nDisplay=1
 protectedItems = []
 for c in clusters:
@@ -160,9 +160,8 @@ print("Longueur du plus court chemin pour l'instant :")
 for i in range (n):
     #print("S1", len(population))
     parcours_trie=Tri_Parcours(population)
-    if len(MeilleursChemins) == 0 or parcours_trie[0][1] < MeilleursChemins[-1][1]:
+    if MeilleurChemin is None or parcours_trie[0][1] < MeilleurChemin[1]:
         MeilleurChemin = (population[parcours_trie[0][0]].copy(), parcours_trie[0][1])
-        MeilleursChemins.append(MeilleurChemin)
         print ("%f km" % (MeilleurChemin[1]/1000))
     matingpool=selection(parcours_trie,eliteSize,totalsize)
     #print("S2", len(matingpool))
@@ -191,32 +190,64 @@ def lighter(hex_color, perc=0.7):
     rgb_hex = [int(hex_color[x:x+2], 16) for x in [1, 3, 5]]
     new_rgb_int = [c + int(perc*(255-c)) for c in rgb_hex]
     return "#" + "".join([hex(i)[2:] for i in new_rgb_int])
-    
-#colors=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
-colors = [matplotlib.colors.to_hex(plt.cm.tab20(i)) for i in range(20)]
 
+# Prepare figure and colors  
+colors = [matplotlib.colors.to_hex(plt.cm.tab20(i)) for i in range(20)]
 fig, ax = plt.subplots()
 
-print ("Meilleur chemin : ", MeilleursChemins[1][0])
-for c in MeilleursChemins[-nDisplay:]:
-    for n in range(len(clusters)):
-        color = colors[n%len(colors)]
-        # draw cantons
-        lightcolor = lighter(color)
-        for poly in polys[n].polys:
-            plot_polygon(ax, poly, color=lightcolor)
-    # Draw route
-    route = [c[0][0]]
-    # draw main nodes
-    for node in c[0]:
-        color = colors[nodeToCluster[node]%len(colors)]
-        networkx.draw_networkx_nodes(ng, ncoords, [node], node_size=20, node_color=color)
-    # draw all path
-    pairRoute = list(networkx.utils.pairwise(c[0]))
-    for a,b in pairRoute:
-        route.extend(networkx.shortest_path(g, a, b)[1:])
-    pairRoute = list(networkx.utils.pairwise(route))
-    networkx.draw_networkx_edges(g, coords, pairRoute, node_size=0, width=2, arrows=False)
-    #for n in c[0]:
-    #    networkx.draw_networkx_nodes(ng, ncoords, [n], node_size=40, node_color=colors[nodeToCluster[n]%len(colors)])    
-    plt.show()
+# draw all cantons in light colors
+for n in range(len(clusters)):
+    color = colors[n%len(colors)]
+    # draw cantons
+    lightcolor = lighter(color)
+    for poly in polys[n].polys:
+        plot_polygon(ax, poly, color=lightcolor)
+# draw main nodes
+for node in MeilleurChemin[0]:
+    color = colors[nodeToCluster[node]%len(colors)]
+    networkx.draw_networkx_nodes(ng, ncoords, [node], node_size=20, node_color=color)
+# draw path
+route = [MeilleurChemin[0][0]]
+pairRoute = list(networkx.utils.pairwise(MeilleurChemin[0]))
+for a,b in pairRoute:
+    route.extend(networkx.shortest_path(g, a, b)[1:])
+pairRoute = list(networkx.utils.pairwise(route))
+networkx.draw_networkx_edges(g, coords, pairRoute, node_size=0, width=2, arrows=False)
+plt.show()
+
+# convert back to lat, lon from UTM data
+print("Converting to gpx and adding elevation")
+import geopandas as gpd
+x = []
+y = []
+for p in route:
+    lon, lat = coords[p]
+    x.append(lon)
+    y.append(lat)
+utm="+proj=utm +zone=32 +north +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+wgs84="EPSG:4326"
+geometry = gpd.points_from_xy(x, y, crs=utm)
+geo = geometry.to_crs(wgs84)
+
+# save gpx track
+with open('solution.gpx', 'w') as f:
+  f.write('''<?xml version="1.0" encoding="UTF-8"?>
+<gpx xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>SUCH</name>
+    <trkseg>''')
+  for p in geo:
+    f.write('      <trkpt lat="%f" lon="%f"></trkpt>' % (p.y, p.x))
+  f.write('''    </trkseg>
+  </trk>
+</gpx>''')
+
+# add ekevation to the gpx track
+import srtm
+import gpxpy
+gpx = gpxpy.parse(open('solution.gpx'))
+elevation_data = srtm.get_data()
+elevation_data.add_elevations(gpx)
+with open('solution.ele.gpx', 'w') as f:
+    f.write(gpx.to_xml())
+
