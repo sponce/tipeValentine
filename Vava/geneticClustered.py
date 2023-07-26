@@ -167,7 +167,7 @@ for i in range (n):
     #print("S2", len(matingpool))
     new_pop=breedPopulation(matingpool, eliteSize, breedingExtraSize)
     #print("S3", len(new_pop))
-    population=mutatePopulation (new_pop,0.04,0.2)
+    population=mutatePopulation (new_pop,0.015,0.1)
 
 
 from matplotlib.path import Path
