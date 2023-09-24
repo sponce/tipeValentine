@@ -29,7 +29,8 @@ def loadPolys():
 
 def get(tol):
     print ('Getting data')
-    rawGraph = osmnx.graph_from_place("Switzerland", simplify=True, network_type="bike")
+    # buffer_dist is there to cover inclusions of Germany in switzerland...
+    rawGraph = osmnx.graph_from_place("Switzerland", simplify=True, network_type="bike", buffer_dist=2000)
     with open(getName("Dump", tol), 'wb') as file:
         pickle.dump(rawGraph, file)
     return rawGraph
@@ -64,7 +65,7 @@ def getCluster(coords, hint, clusters):
 
 clusterDefs = loadPolys().values()
 
-protectedPlaces = {'Velosophe': (871856370, 'Canton de Genève'), 'Chocolarium': (5254387475, 'Kanton St. Gallen'), 'Cheese shop': (1353117360, 'Canton de Fribourg'), 'Butcher shop': (3041241876, 'Kanton Wallis'), 'Maison de la tete de moine': (4554362977, 'Kanton Bern'), 'Salami shop': (3023156148, 'Canton Ticino'), 'BackeryKeller': (264562811, 'Kanton St. Gallen'), 'BERN': (33202504, 'Kanton Bern')}
+protectedPlaces = {'Campione d\'Italia': (9008012407, 'Canton Ticino'), 'Busingen': (390407244, 'Schaffouse or Turgovie'), 'alte Rheinbrücke': (1378764555, 'Kanton St. Gallen'), 'Pont de Grilly': (1186596358, 'Canton de Geneve'), 'Rheinbrücke': (176724546, 'Kanton St. Gallen'), 'BERN': (33202504, 'Kanton Bern')}
 protectedNodes = [a for a,b in protectedPlaces.values()]
 
 def convertToDiGraph(osmGraph):
@@ -101,20 +102,22 @@ def convert(osmGraph, tol):
     clusters = [[] for n in range(len(clusterDefs))]
     nodeToCluster = {}
     curClus = None
-    dropped = []
+    #dropped = []
     for n in graph._node:
         coords = (osmGraph._node[n]['x'], osmGraph._node[n]['y'])
         c = getCluster(coords, curClus, clusterDefs)
-        if c is None:
-            dropped.append(n)
-            continue # ignore that node, it's not inside the region of interest
+        #if c is None and n not in osmidToNode.values():
+        #    dropped.append(n)
+        #    continue # ignore that node, it's not inside the region of interest
         node_coords[n] = coords
-        clusters[c.number].append(n)
-        nodeToCluster[n] = c.number
-        curClus = c
+        if c :
+            clusters[c.number].append(n)
+        nodeToCluster[n] = c.number if c else -1
+        if c:
+            curClus = c
     # cleanup original graph
-    for n in dropped:
-        graph.remove_node(n)
+    #for n in dropped:
+    #    graph.remove_node(n)
     with open(getName('DiGraph', tol), 'wb') as file:
         pickle.dump((graph, node_coords, clusters, nodeToCluster, osmidToNode), file)
     return graph, node_coords, clusters, nodeToCluster, osmidToNode
@@ -150,8 +153,8 @@ def simplifyGraph(G: networkx.DiGraph, nodeToCluster, droppedClusters, protected
                         g0[in_src][out_dst]['weight'] = min(dist, g0[in_src][out_dst]['weight'])
                     else:
                         g0.add_edge(in_src, out_dst, weight=dist)
-                        if nodeToCluster[in_src] != nodeToCluster[out_dst]:
-                            print('AIE', in_src, out_dst, nodeToCluster[in_src], nodeToCluster[out_dst])
+                        #if nodeToCluster[in_src] != nodeToCluster[out_dst]:
+                        #    print('AIE', in_src, out_dst, nodeToCluster[in_src], nodeToCluster[out_dst])
             g0.remove_node(node)
     return g0
 
@@ -159,7 +162,7 @@ def simplify(graph, node_coords, clusters, nodeToClusters, osmidToNode, tol):
     print(osmidToNode)
     print ('Simplifying graph')
     protectedOsmId = [osmidToNode[id] for id in protectedNodes]
-    droppedClusters = [getCluster(node_coords[osmidToNode[a]], None, clusterDefs).number for a in protectedNodes]
+    droppedClusters = [nodeToClusters[osmidToNode[a]] for a in protectedNodes]
     # implify step by step or the number of edges skyrockets and everything is slow
     sg = simplifyGraph(graph, nodeToClusters, droppedClusters, protectedOsmId, 20)
     print(sg)
