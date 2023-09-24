@@ -15,7 +15,13 @@ class Fitness:
 def Tri_Parcours(population):
     M=[]
     for i in range (0,len(population)):
-        M.append((i,Fitness(population[i]).distance))
+        try:
+            M.append((i,Fitness(population[i]).distance))
+        except KeyError:
+            # one distance does not exist. Typically because one node is a dead end,
+            # that is a one way road going out of switzerland. Let's thus ignore the
+            # item having this node
+            None
     return sorted(M,key = lambda item: item[1]) #lambda =fonction (entrée= item et renvoie item[1])
 
 def selection (parcours_trie,eliteSize,totalSize):
@@ -53,8 +59,15 @@ def breed(parent1, parent2):
     clusFilsP1 = [nodeToCluster[item] for item in filsP1]
     filsP2 = [item for item in parent2 if (nodeToCluster[item] not in clusFilsP1 or
                                            (item in protectedItems and item not in filsP1))]
-
     fils = filsP1 + filsP2
+    # drop some canton if we have too many (we need all but 2) and there is -1 for Busingen
+    clusFils = set([nodeToCluster[item] for item in fils])
+    while len(clusFils) > 25:
+        index = int(random.random() * (len(clusFils)))
+        item = fils[index]
+        if item not in protectedItems:
+            clusFils.remove(nodeToCluster[item])
+            fils.remove(item)
     return fils
 
 def breedPopulation(matingpool, eliteSize, extraSize):
@@ -73,14 +86,13 @@ def breedPopulation(matingpool, eliteSize, extraSize):
     #print("AFT", len(children))
     return children
 
-def mutate(route, mutationRate, clusterMutationRate):
+def mutate(route, mutationRate, clusterMutationRate, cantonMutationRate):
     for swapped in range(len(route)-1): # preserve bern as last point
         if(random.random() < mutationRate):
             swapWith = int(random.random() * (len(route)-1))
             #print('mutate',swapped,swapWith)
             city1 = route[swapped]
             city2 = route[swapWith]
-            
             route[swapped] = city2
             route[swapWith] = city1
         if random.random() < clusterMutationRate and \
@@ -91,44 +103,64 @@ def mutate(route, mutationRate, clusterMutationRate):
             i0 = route[swapped-1]
             i1 = route[swapped]
             i2 = route[swapped+1]
-            dorig = distances[i0][i1] + distances[i1][i2]
-            for nc in clusters[clus]:
-                if nc != route[swapped]:
-                    newd = distances[i0][nc] + distances[nc][i2]
-                    if newd < dorig:
-                        route[swapped] = nc
-                        dorig = newd
+            try:
+                dorig = distances[i0][i1] + distances[i1][i2]
+                for nc in clusters[clus]:
+                    if nc != route[swapped]:
+                        try:
+                            newd = distances[i0][nc] + distances[nc][i2]
+                            if newd < dorig:
+                                route[swapped] = nc
+                                dorig = newd
+                        except KeyError:
+                            # the order we tried is not possible, due to on way roads
+                            None
+            except KeyError:
+                # the order we tried is not possible, due to on way roads
+                None
+        if random.random() < cantonMutationRate and \
+           route[swapped] not in protectedItems:
+            # exchange this cluster with a non used cluster
+            usedClus = set([nodeToCluster[r] for r in route])
+            remClus = list(set(range(len(clusters))) - usedClus)
+            route[swapped] = random.choice(clusters[random.choice(remClus)])
         for other in range(swapped+2, min(swapped+6, len(route)-1)):
             # 2-opt
             i1 = route[swapped]
             i2 = route[swapped+1]
             j1 = route[other]
             j2 = route[other+1]
-            gain = distances[i1][i2] + distances[j1][j2] - distances[i1][j1] - distances[i2][j2]
-            if gain > 0:
-                r = route[swapped+1]
-                route[swapped+1] = route[other]
-                route[other] = r
+            try:
+                gain = distances[i1][i2] + distances[j1][j2] - distances[i1][j1] - distances[i2][j2]
+                if gain > 0:
+                    r = route[swapped+1]
+                    route[swapped+1] = route[other]
+                    route[other] = r
+            except:
+                # the order we tried is not possible, due to on way roads
+                None                
     return route
 
-def mutatePopulation(population, mutationRate, clusterMutationRate):
+def mutatePopulation(population, mutationRate, clusterMutationRate, cantonMutationRate):
     mutatedPop = []
     for route in range(0, len(population)):
-        mutatedInd = mutate(population[route], mutationRate, clusterMutationRate)
+        mutatedInd = mutate(population[route], mutationRate, clusterMutationRate, cantonMutationRate)
         mutatedPop.append(mutatedInd)
     return mutatedPop
 
 def createRoute(clusters):
-    # pick one city per cluster and randomize the order
+    # pick one city per non mandatory cluster except 2 plus all mandatory and randomize the order
     # make sure Bern is last
     route = []
+    mandatory = [osmidToNode[390407244]] # special case of busingen not in any cluster
     for c in clusters:
         if len(c) > 3:
             route.append(random.choice(c))
         else:
             for n in c:
                 if n != bern:
-                    route.append(n)
+                    mandatory.append(n)
+    route = random.sample(route, len(route))[:-2] + mandatory
     return random.sample(route, len(route)) + [bern]
 
 # load data from SmallProblem
@@ -155,6 +187,8 @@ protectedItems = []
 for c in clusters:
     if len(c) < 4:
         protectedItems.extend(c)
+# Add Busingen
+protectedItems.append(osmidToNode[390407244])
 
 print("Longueur du plus court chemin pour l'instant :")
 for i in range (n):
@@ -167,7 +201,7 @@ for i in range (n):
     #print("S2", len(matingpool))
     new_pop=breedPopulation(matingpool, eliteSize, breedingExtraSize)
     #print("S3", len(new_pop))
-    population=mutatePopulation (new_pop,0.015,0.1)
+    population=mutatePopulation (new_pop,0.015,0.1,0.01)
 
 
 from matplotlib.path import Path
@@ -205,7 +239,10 @@ for n in range(len(clusters)):
 # draw main nodes
 for node in MeilleurChemin[0]:
     color = colors[nodeToCluster[node]%len(colors)]
-    networkx.draw_networkx_nodes(ng, ncoords, [node], node_size=20, node_color=color)
+    networkx.draw_networkx_nodes(ng, ncoords, [node], node_size=60, node_color=color)
+# draw key places
+for node in osmidToNode.values():
+    networkx.draw_networkx_nodes(ng, ncoords, [node], node_size=100, node_shape='x', node_color='black')
 # draw path
 route = [MeilleurChemin[0][0]]
 pairRoute = list(networkx.utils.pairwise(MeilleurChemin[0]))
@@ -213,6 +250,8 @@ for a,b in pairRoute:
     route.extend(networkx.shortest_path(g, a, b)[1:])
 pairRoute = list(networkx.utils.pairwise(route))
 networkx.draw_networkx_edges(g, coords, pairRoute, node_size=0, width=2, arrows=False)
+print(MeilleurChemin[0])
+print([nodeToCluster[n] for n in MeilleurChemin[0]])
 plt.show()
 
 # convert back to lat, lon from UTM data
