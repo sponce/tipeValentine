@@ -6,11 +6,45 @@ import matplotlib.pyplot as plt
 
 from cluster import Cluster
 
-basename = "Swiss" # Play
+basename = "Swiss"
 tol = ""
 tolerance = 20000
 subtolerance = 25
-center = 46.3228088,6.2205695 # 47.3774417,8.5367355 - Zurich
+
+useful_tags_path = ['highway', 'surface']
+osmnx.settings.useful_tags_way=useful_tags_path
+
+def badSurface(s):
+    if isinstance(s, list):
+        for t in s:
+            if badSurface(t): return True
+        return False
+    if ':' in s : s = s[:s.find(':')]
+    if s in ['paved', 'asphalt', 'chipseal', 'concrete', 'paving_stones', 'sett', 'brick', 'metal', 'wood', 'compacted']:
+        return False
+    return True
+
+slowness = {
+    'paved' : 1,
+    'asphalt' : 1,
+    'chipseal' : 1.1,
+    'concrete' : 1.1,
+    'paving_stones': 1.5,
+    'sett' : 1.3,
+    'brick' : 1.2,
+    'metal': 1.2,
+    'wood' : 1.2,
+    'compacted' : 2,
+}
+
+def surfaceSlowness(s):
+    if isinstance(s, list):
+        r = 1
+        for t in s:
+            r = min(r, surfaceSlowness(t))
+        return r
+    if ':' in s : s = s[:s.find(':')]
+    return slowness[s]
 
 def getName(step, tol="20k"):
     return "%s%s%s.pkl" % (basename, step, tol)
@@ -75,11 +109,24 @@ def convertToDiGraph(osmGraph):
     osmidToNode = {}
     for u,v,data in osmGraph.edges(data=True):
         if u == v: continue
-        w = data['length']
+        slowFactor = 1
+        highway = data['highway']
+        if highway in ('path', 'track') or 'path' in highway or 'track' in highway:
+            if 'surface' in data:
+                s = data['surface']
+                if badSurface(s): continue
+                slowFactor = surfaceSlowness(s)
+            else:
+                slowFactor = 2
+        if highway == 'service' or 'service' in highway:
+            slowfactor = 1.5
+        w = data['duration']
         if graph.has_edge(u,v):
-            graph[u][v]['weight'] = min(w, graph[u][v]['weight'])
+            if w < graph[u][v]['weight']:
+                graph[u][v]['weight'] = w
+                graph[u][v]['slowFactor'] = slowFactor
         else:
-            graph.add_edge(u, v, weight=w)
+            graph.add_edge(u, v, weight=w, slowFactor=slowFactor)
     for n in osmGraph._node:
         l = osmGraph._node[n]['osmid_original']
         if isinstance(l, str):
