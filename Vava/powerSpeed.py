@@ -71,10 +71,9 @@ def getAltitude(n):
 
 import pickle
 import networkx
-with open('SmallConsolidated.pkl', 'rb') as file:
+with open('SwissDump.pkl', 'rb') as file:
   g = pickle.load(file)
 
-#i = 0
 for u,v,k,data in g.edges(keys=True, data=True):
   au = getAltitude(u)
   av = getAltitude(v)
@@ -88,5 +87,5 @@ for u,v,k,data in g.edges(keys=True, data=True):
     t = t * data['slowFactor']
   networkx.set_edge_attributes(g, {(u,v,k):{"duration":t}})
 
-with open('SmallConsolidatedTime.pkl', 'wb') as file:
+with open('SwissDumpTime.pkl', 'wb') as file:
   pickle.dump(g, file)
