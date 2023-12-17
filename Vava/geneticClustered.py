@@ -165,6 +165,8 @@ def createRoute(clusters):
 
 # load data from SmallProblem
 print("Loading data...")
+with open("SwissConsolidated.pkl", 'rb') as file:
+    cg = pickle.load(file)
 with open("SwissDiGraph.pkl", 'rb') as file:
     g, coords, _, _, osmidToNode = pickle.load(file)
 with open("SwissSimpleGraph.pkl", 'rb') as file:
@@ -247,7 +249,7 @@ for node in osmidToNode.values():
 route = [MeilleurChemin[0][0]]
 pairRoute = list(networkx.utils.pairwise(MeilleurChemin[0]))
 for a,b in pairRoute:
-    route.extend(networkx.shortest_path(g, a, b)[1:])
+    route.extend(networkx.shortest_path(cg, a, b, weight='duration')[1:])
 pairRoute = list(networkx.utils.pairwise(route))
 networkx.draw_networkx_edges(g, coords, pairRoute, node_size=0, width=2, arrows=False)
 print(MeilleurChemin[0])
@@ -276,17 +278,7 @@ with open('solution.gpx', 'w') as f:
     <name>SUCH</name>
     <trkseg>''')
   for p in geo:
-    f.write('      <trkpt lat="%f" lon="%f"></trkpt>' % (p.y, p.x))
+    f.write('      <trkpt lat="%f" lon="%f"></trkpt>\n' % (p.y, p.x))
   f.write('''    </trkseg>
   </trk>
 </gpx>''')
-
-# add ekevation to the gpx track
-import srtm
-import gpxpy
-gpx = gpxpy.parse(open('solution.gpx'))
-elevation_data = srtm.get_data()
-elevation_data.add_elevations(gpx)
-with open('solution.ele.gpx', 'w') as f:
-    f.write(gpx.to_xml())
-
