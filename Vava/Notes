@@ -1,8 +1,20 @@
+Way to prepare data :
+  - use createGraph but stop after getting data (SwissDump.pkl)
+  - run powerSpeed on it to get SwissDumpTime.pkl
+  - rename SwissDumpTime.pkl to SwissDump.pkl
+  - restart createGraph to get all data (SwissConsolidated/DiGraph/Distances/SimpleGraph.pkl)
+
+Way to get faster way :
+  - run geneticClustered.py
+
+
 createGRaph.py
 ==============
 
-there are a number of steps there to extract useful data from original osmnx tools
-getSimpleGraph will just spit it out... after some time !
+there are a number of steps there to extract useful data from original osmnx tools.
+One missing step is the computation of travel duration which is done in powerSpeed.py
+This should be integrated here but at this stage, one has to do things by hand (see above)
+
 All steps cache results to files and read those files if present rather than recomputing
 
 getRaw
@@ -45,12 +57,6 @@ getDistances
   - stores the double entry dict into a pkl file ending with "Distances.pkl"
 
 
-createSmalleProblem.py
-======================
-
-loads the swiss full graph and reduces it to few cantons to make a small problem, easier to debug
-
-
 extractCantonsPolys.py
 ======================
 
@@ -65,4 +71,12 @@ geneticClustered.py
 ===================
 
 solves the switzerland clustered problem with genetic algo
-then save the track to solution.gpx and solution.ele.gpx with extra elevation data
+then save the track to solution.gpx with extra elevation data
+
+
+powerSpeed.py
+=============
+
+adds "duration" entries to edges, computed from the length, the altitudes and the type of path
+To be used on consolidated data before reinjecting into createGraph
+
